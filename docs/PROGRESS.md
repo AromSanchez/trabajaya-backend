@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T11 — Reportes de incidencias.**
+- **T12 — Favoritos y notificaciones.**
 
-> **Tarea siguiente:** T12 — Favoritos y notificaciones.
+> **Tarea siguiente:** T13 — Datos de prueba.
 
 ## Pendientes (en orden)
-- [ ] T12 — Favoritos y notificaciones
 - [ ] T13 — Datos de prueba
 
 ## Postergadas (fuera del MVP por ahora)
@@ -27,6 +26,7 @@
 - [x] **T8 — Solicitud de servicio y estados del servicio:** enums `EstadoServicio`/`RolActor`, modelos `Servicio`, `FotoServicio`, `HistorialServicio` y `Configuracion`, módulo `src/modules/servicios` con crear/listar/ver, aceptar/rechazar/completar/cancelar y expiración automática a las 24 h, y endpoint admin `GET /admin/cancelaciones-tardias`. *(2026-10-11)*
 - [x] **T9 — Chat en tiempo real (Socket.IO) y acuerdo de precio/alcance:** modelos `Mensaje` y `Propuesta` y enum `EstadoPropuesta`, campos `montoAcordado`/`alcanceAcordado` en `Servicio`, módulo `src/modules/chat` (historial y envío REST), Socket.IO con autenticación JWT y salas por servicio, y endpoints de propuesta (`crear`/`aceptar`/`rechazar`). *(2026-10-11)*
 - [x] **T10 — Reseñas (solo tras servicio completado) e historial:** modelo `Resena` y campos de reputación en `Tecnico` (`calificacionPromedio`, `totalResenas`, `serviciosCompletados`), módulo `src/modules/resenas` (crear reseña, listado público e historial por rol), recalculo de reputación en transacción, orden de búsqueda por calificación y ocultación de reseñas por el admin. *(2026-10-11)*
+- [x] **T11 — Reportes de incidencias:** enums `TipoObjetivoReporte`/`CategoriaReporte`/`EstadoReporte` y modelo `Reporte`, módulo `src/modules/reportes` con creación ligada a un servicio (cliente→técnico, técnico→cliente, técnico→reseña), validación de categoría por objetivo, comentario obligatorio en `fraude`/`otro` y anti-duplicado, y endpoints admin para listar/filtrar, ver y resolver/descartar con nota. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -117,7 +117,13 @@
 - **Reseñas públicas:** `GET /tecnicos/:id/resenas` (solo `cliente`; el técnico debe estar `verificado` y con `oficio`, si no `404`); muestra calificación, comentario, fecha y el autor como **primer nombre + inicial del apellido** (`"Ana T."`).
 - **Moderación:** `POST /admin/resenas/:id/ocultar` (motivo obligatorio) marca la reseña como oculta sin borrarla y recalcula la reputación sin las ocultas. Ocultar dos veces → `409`; ya oculta deja de aparecer en el listado público.
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9 y T10)
+### T11
+- **Modelo:** enums `TipoObjetivoReporte { tecnico, cliente, resena }`, `CategoriaReporte { no_se_presento, no_estaba, trabajo_deficiente, cobro_diferente, comportamiento_inapropiado, fraude, contenido_inapropiado, otro }` y `EstadoReporte { pendiente, resuelto, descartado }`; modelo `Reporte` (servicio, reportante + rol, objetivo polimórfico `objetivoUsuarioId`/`objetivoResenaId`, categoría, comentario, estado y resolución). `Usuario` suma `reportesCreados`/`reportesRecibidos`/`reportesResueltos`; `Servicio` suma `reportes`; `Resena` suma `reportes`. Migración `20261011182740_reportes` (aditiva).
+- **Módulo `src/modules/reportes`:** exporta dos routers montados en `index.js`: `/reportes` (rol `cliente`/`tecnico`; `POST /reportes`) y `/admin` (rol `admin`; `GET /admin/reportes`, `GET /admin/reportes/:id`, `PATCH /admin/reportes/:id`). Convive con `adminRoutes` sin choques.
+- **Reglas:** todo reporte se liga a un servicio en estado `aceptado`/`completado`/`cancelado` (`409` si no); el cliente reporta al técnico de un servicio suyo, el técnico reporta al cliente de un servicio suyo o una reseña suya (un cliente **no** reporta reseñas); un no participante → `404`. Categoría válida según el objetivo (`400` si no corresponde); comentario ≤ 500, obligatorio en `fraude`/`otro`. Anti-duplicado por `(reportante, servicio, tipoObjetivo)` → `409`.
+- **Gestión del admin:** `GET /admin/reportes` con filtros `estado`, `tipo_objetivo`, `categoria` y paginación (`page` default 1, `limit` default 20 tope 50, más reciente primero). `PATCH /admin/reportes/:id` con `{ estado: "resuelto" | "descartado", nota }` (nota obligatoria) y solo desde `pendiente` (`409` si ya está cerrado). El reporte **no** sanciona solo; el admin sanciona con los endpoints existentes (suspender técnico, ocultar reseña).
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10 y T11)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -139,6 +145,9 @@
 - Migración `20261011070122_resenas` aplicada.
 - **T10** — con cliente, segundo cliente, técnico verificado (setup por BD) y el admin sembrado: reseñar sin completar → `409`; calificación `0` y `6` → `400`; otro cliente → `404`; técnico en ruta de cliente → `403`. Crear reseña válida → `201`, técnico `calificacionPromedio: 5` y `totalResenas: 1`; repetir → `409`. `GET /tecnicos/:id/resenas` → `200` con autor `"Ana T."`; `GET /tecnicos/:id` y `GET /tecnicos?oficio=...` devuelven promedio `5`, total `1` y `serviciosCompletados: 1` (el completar incrementó el contador). Historial cliente/técnico → `200` con la reseña adjunta y la `direccion` correcta; filtro `estado=cancelado` → lista vacía; autorización cruzada → `403`; sin token → `401`; reseñas públicas sin rol cliente → `403`/`401`; técnico inexistente → `404`. Admin oculta → `200`, promedio `null` y total `0`, listado público `0`; ocultar de nuevo → `409`; inexistente → `404`; sin motivo → `400`; como cliente → `403`. Resultado: **46/46 comprobaciones correctas**.
 - Datos de prueba de T10 eliminados (queda solo el admin; 0 técnicos/servicios/resenas/mensajes).
+- Migración `20261011182740_reportes` aplicada.
+- **T11** — con cliente, segundo cliente, dos técnicos verificados y los servicios/reseñas de prueba creados por BD (setup), y el admin sembrado: cliente reporta al técnico en `aceptado` → `201` (`estado: pendiente`, objetivo `tecnico`, reportante correcto); repetir el mismo → `409`; `fraude` sin comentario → `400`, con comentario → `201`; servicio `pendiente` → `409`; categoría `no_estaba` contra técnico → `400` y `no_se_presento` en `cancelado` → `201`; cliente intenta reportar reseña → `403`; técnico reporta al cliente → `201` (objetivo `cliente`); categoría de técnico contra cliente → `400`; técnico reporta su reseña → `201` (objetivo `resena`); reseña ajena → `404`; cliente no participante → `404`; categoría inexistente, `servicio_id`/`resena_id` faltantes y comentario > 500 → `400`; servicio inexistente → `404`; sin token → `401`, admin creando → `403`. Admin: listado con `reportante` y paginación correcta; filtros `estado=pendiente`, `tipo_objetivo=resena` y `categoria=fraude` → `200`; `limit=1` → `200`; `estado` inválido → `400`; detalle → `200`, inexistente → `404`; resolver sin nota → `400`, estado inválido → `400`, resolver → `200` (`estado: resuelto`, `notaResolucion`, `resueltoAt`, `resueltoPor`), resolver de nuevo → `409`, descartar otro → `200`, resolver inexistente → `404`; cliente en rutas admin → `403`, sin token → `401`. Resultado: **49/49 comprobaciones correctas**.
+- Datos de prueba de T11 eliminados (queda solo el admin; 0 técnicos/servicios/resenas/reportes).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*

@@ -113,7 +113,37 @@ Body:
 Respuesta 200:
 { "data": { "resena": { "id": 1, "servicioId": 1, "calificacion": 1, "comentario": "Comentario ofensivo", "oculta": true, "motivoOcultamiento": "Contenido inapropiado", "ocultadaAt": "2026-10-11T09:00:00.000Z" } } }
 Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 no eres admin · 404 reseña no encontrada · 409 la reseña ya está oculta
-Nota: ocultar no elimina la reseña; queda registrada con quién la ocultó (`ocultadaPorId`), cuándo (`ocultadaAt`) y por qué (`motivoOcultamiento`). El flujo de reportes de reseñas llega en T11.
+Nota: ocultar no elimina la reseña; queda registrada con quién la ocultó (`ocultadaPorId`), cuándo (`ocultadaAt`) y por qué (`motivoOcultamiento`). El técnico puede reportar una reseña que recibió y el admin verla en `GET /admin/reportes`.
+Estado: listo
+
+### GET /admin/reportes
+Lista los reportes de incidencias creados por clientes y técnicos. Filtros y paginación opcionales.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Query (opcional): `estado` ∈ `pendiente` | `resuelto` | `descartado` · `tipo_objetivo` ∈ `tecnico` | `cliente` | `resena` · `categoria` ∈ `no_se_presento` | `no_estaba` | `trabajo_deficiente` | `cobro_diferente` | `comportamiento_inapropiado` | `fraude` | `contenido_inapropiado` | `otro` · `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{ "data": { "reportes": [ { "id": 1, "tipoObjetivo": "tecnico", "categoria": "trabajo_deficiente", "comentario": "El trabajo quedó incompleto", "estado": "pendiente", "reportante": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "objetivo": { "tipo": "tecnico", "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "servicio": { "id": 1, "estado": "aceptado" }, "notaResolucion": null, "resueltoPor": null, "resueltoAt": null, "createdAt": "2026-10-11T09:00:00.000Z", "updatedAt": "2026-10-11T09:00:00.000Z" } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 filtros o paginación inválidos · 401 no autenticado / token inválido · 403 no eres admin
+Notas: orden del más reciente al más antiguo. Cuando el objetivo es una reseña, `objetivo` es `{ "tipo": "resena", "id": 1, "calificacion": 1, "comentario": "..." }`. El admin **no** puede crear reportes.
+Estado: listo
+
+### GET /admin/reportes/:id
+Detalle de un reporte.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Respuesta 200:
+{ "data": { "reporte": { "id": 1, "tipoObjetivo": "tecnico", "categoria": "trabajo_deficiente", "comentario": "El trabajo quedó incompleto", "estado": "resuelto", "reportante": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "objetivo": { "tipo": "tecnico", "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "servicio": { "id": 1, "estado": "aceptado" }, "notaResolucion": "Se suspendió al técnico", "resueltoPor": { "id": 5, "nombre": "Admin" }, "resueltoAt": "2026-10-11T10:00:00.000Z", "createdAt": "2026-10-11T09:00:00.000Z", "updatedAt": "2026-10-11T10:00:00.000Z" } } }
+Errores: 400 id inválido · 401 no autenticado / token inválido · 403 no eres admin · 404 reporte no encontrado
+Estado: listo
+
+### PATCH /admin/reportes/:id
+Marca un reporte como **resuelto** o **descartado** con una nota obligatoria. Solo se puede cerrar un reporte `pendiente`. Este endpoint **no** aplica sanciones: el admin suspende al técnico u oculta la reseña por separado.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Body:
+{ "estado": "resuelto", "nota": "Se suspendió al técnico por incumplimiento" }
+- `estado`: `resuelto` o `descartado` (obligatorio).
+- `nota`: 1–500 caracteres (obligatoria).
+Respuesta 200:
+{ "data": { "reporte": { "id": 1, "tipoObjetivo": "tecnico", "categoria": "trabajo_deficiente", "comentario": "El trabajo quedó incompleto", "estado": "resuelto", "reportante": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "objetivo": { "tipo": "tecnico", "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "servicio": { "id": 1, "estado": "aceptado" }, "notaResolucion": "Se suspendió al técnico por incumplimiento", "resueltoPor": { "id": 5, "nombre": "Admin" }, "resueltoAt": "2026-10-11T10:00:00.000Z", "createdAt": "2026-10-11T09:00:00.000Z", "updatedAt": "2026-10-11T10:00:00.000Z" } } }
+Errores: 400 estado o nota inválidos · 401 no autenticado / token inválido · 403 no eres admin · 404 reporte no encontrado · 409 el reporte ya fue resuelto o descartado
 Estado: listo
 
 Nota (sin endpoint propio): el admin puede ver el detalle de un servicio con `GET /servicios/:id` (incluye `montoAcordado`, `alcanceAcordado` y `propuestas`), pero **no** tiene acceso a las conversaciones del chat (`GET/POST /chat/servicios/:id/mensajes` responden `403` para el rol `admin`); el chat es privado entre cliente y técnico.

@@ -104,6 +104,20 @@
 - **Moderación:** el admin puede **ocultar** una reseña con motivo obligatorio (`POST /admin/resenas/:id/ocultar`), **sin borrarla**; al ocultarla, el promedio se recalcula sin contar las ocultas y deja de aparecer en el listado público. El flujo de *reportes* de reseñas llega en T11; la ocultación ya queda disponible.
 - **Comisión:** T10 no toca la comisión; sigue en 0.
 
+### Reportes de incidencias (T11)
+- **Siempre ligado a un servicio:** todo reporte apunta a un `Servicio` donde el reportante participó. No existen reportes libres a perfiles. Solo se puede reportar desde servicios en estado **`aceptado`, `completado` o `cancelado`** (`409` en cualquier otro).
+- **Quién reporta a qué** (validado en el backend según el rol, nunca por el body):
+  - El **cliente** reporta al **técnico** de un servicio suyo (`tipo_objetivo: "tecnico"`).
+  - El **técnico** reporta al **cliente** de un servicio suyo (`tipo_objetivo: "cliente"`).
+  - El **técnico** reporta una **reseña recibida** en su perfil (`tipo_objetivo: "resena"`, con `resena_id`); solo la reseña que le pertenece. El cliente **no** reporta reseñas.
+  - Si el reportante no es participante del servicio, o la reseña no es suya, responde `404` (no se revela la existencia del recurso).
+- **Categorías (una sola lista fija, obligatoria):** `no_se_presento`, `no_estaba`, `trabajo_deficiente`, `cobro_diferente`, `comportamiento_inapropiado`, `fraude`, `contenido_inapropiado`, `otro`.
+  - **Válidas por objetivo:** contra técnico → `no_se_presento`, `trabajo_deficiente`, `cobro_diferente`, `comportamiento_inapropiado`, `fraude`, `otro`; contra cliente → `no_estaba`, `comportamiento_inapropiado`, `fraude`, `otro`; contra reseña → `contenido_inapropiado`, `fraude`, `otro`. Categoría que no corresponde al objetivo → `400`.
+- **Comentario:** opcional, máximo 500 caracteres; **obligatorio** cuando la categoría es `fraude` u `otro` (si no, `400`).
+- **Sin duplicados:** un reportante no puede crear dos reportes al mismo objetivo en el mismo servicio (`409`). La unicidad se controla por `reportanteId` + `servicioId` + `tipoObjetivo`.
+- **El admin gestiona, no sanciona:** el admin lista/filtra los reportes y los marca como **`resuelto`** o **`descartado`** con una **nota obligatoria**. Las sanciones (suspender al técnico, ocultar la reseña) se aplican **manualmente** con los endpoints ya existentes (`POST /admin/tecnicos/:id/suspender`, `POST /admin/resenas/:id/ocultar`). El reporte **no** dispara sanciones automáticas.
+- **Estados del reporte:** `pendiente` (al crearse) → `resuelto` o `descartado` (final). Resolver/descartar un reporte ya cerrado → `409`.
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -182,5 +196,13 @@
 - **Ocultar desde el módulo admin:** `admin.service` importa `recalcularReputacion` de `resenas.service` para recalcular en la transacción de la ocultación (no hay dependencia circular: `resenas` no requiere `admin`).
 - **Orden de búsqueda actualizado:** `disponible` desc → `calificacionPromedio` desc (`nulls: last`) → `serviciosCompletados` desc → `aniosExperiencia` desc (`nulls: last`) → `id` asc en `GET /tecnicos`.
 - **Nombre público del autor:** helper que toma el primer nombre y la inicial del último apellido (`"Ana Torres"` → `"Ana T."`).
+
+### Reportes de incidencias (T11)
+- **Modelo `Reporte`:** `servicioId` (Cascade), `reportanteId`/`reportanteRol`, `tipoObjetivo` (`TipoObjetivoReporte`), objetivo polimórfico con `objetivoUsuarioId` (para `tecnico`/`cliente`) u `objetivoResenaId` (para `resena`), `categoria` (`CategoriaReporte`), `comentario?`, `estado` (`EstadoReporte`, default `pendiente`) y campos de resolución `resueltoPorId?`/`notaResolucion?`/`resueltoAt?`. Índices por `servicioId`, `estado` y `reportanteId`. `Usuario` suma `reportesCreados`/`reportesRecibidos`/`reportesResueltos`; `Servicio` suma `reportes`; `Resena` suma `reportes`. Migración `20261011182740_reportes` (aditiva).
+- **Objetivo polimórfico:** `tipoObjetivo` decide cuál FK se llena; el backend la deriva del servicio (no se acepta un id de objetivo del cliente, para evitar suplantación). Para `tecnico`/`cliente` el objetivo es un `Usuario` (se resuelve desde el servicio); para `resena` se guarda `objetivoResenaId`. Un `select` común (`REPORTE_SELECT`) trae ambas relaciones opcionales y la serialización arma `objetivo` según el `tipoObjetivo`.
+- **Validación de categoría por objetivo:** la lista fija está en el servicio (`CATEGORIAS_POR_OBJETIVO`) además del enum de Zod, porque la validez depende del objetivo (no se puede expresar solo en el esquema Zod del body). El comentario obligatorio (`fraude`/`otro`) también se valida en el servicio.
+- **Anti-duplicado:** `findFirst({ reportanteId, servicioId, tipoObjetivo })` antes de crear → `409`. Como una reseña pertenece a un solo servicio, basta con el par `(servicio, tipoObjetivo)` para cubrir también las reseñas.
+- **Módulo `src/modules/reportes/`:** exporta `router` (rol `cliente`/`tecnico`; `POST /reportes`) y `admin` (rol `admin`; `GET /admin/reportes`, `GET /admin/reportes/:id`, `PATCH /admin/reportes/:id`). En `index.js` se montan en `/reportes` y `/admin` respectivamente (el `admin` de reportes convive con `adminRoutes`, que no captura `/admin/reportes`).
+- **Resolución:** `resolverReporte(adminId, id, { estado, nota })` exige estado `pendiente` (`409` si no) y guarda `resueltoPorId`/`notaResolucion`/`resueltoAt`. `estado` solo admite `resuelto`/`descartado` (Zod); `nota` es obligatoria (1–500).
 
 

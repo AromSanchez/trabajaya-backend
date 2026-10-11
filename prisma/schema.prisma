@@ -65,6 +65,29 @@ enum EstadoPropuesta {
   rechazada
 }
 
+enum TipoObjetivoReporte {
+  tecnico
+  cliente
+  resena
+}
+
+enum CategoriaReporte {
+  no_se_presento
+  no_estaba
+  trabajo_deficiente
+  cobro_diferente
+  comportamiento_inapropiado
+  fraude
+  contenido_inapropiado
+  otro
+}
+
+enum EstadoReporte {
+  pendiente
+  resuelto
+  descartado
+}
+
 model Configuracion {
   clave     String   @id
   valor     String
@@ -88,6 +111,9 @@ model Usuario {
   propuestasRespondidas Propuesta[]             @relation("PropuestasRespondidas")
   resenasCliente        Resena[]                @relation("ResenasCliente")
   resenasOcultadas      Resena[]                @relation("ResenasOcultadas")
+  reportesCreados       Reporte[]               @relation("ReportesCreados")
+  reportesRecibidos     Reporte[]               @relation("ReportesRecibidos")
+  reportesResueltos     Reporte[]               @relation("ReportesResueltos")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -195,6 +221,7 @@ model Servicio {
   mensajes           Mensaje[]
   propuestas         Propuesta[]
   resena             Resena?
+  reportes           Reporte[]
 
   @@index([clienteId])
   @@index([tecnicoId])
@@ -278,6 +305,34 @@ model Resena {
   ocultadaAt         DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  reportes           Reporte[]
 
   @@index([tecnicoId, oculta])
+}
+
+model Reporte {
+  id                Int                  @id @default(autoincrement())
+  servicioId        Int
+  servicio          Servicio             @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  reportanteId      Int
+  reportante        Usuario              @relation("ReportesCreados", fields: [reportanteId], references: [id])
+  reportanteRol     RolActor
+  tipoObjetivo      TipoObjetivoReporte
+  objetivoUsuarioId Int?
+  objetivoUsuario   Usuario?             @relation("ReportesRecibidos", fields: [objetivoUsuarioId], references: [id])
+  objetivoResenaId  Int?
+  objetivoResena    Resena?              @relation(fields: [objetivoResenaId], references: [id])
+  categoria         CategoriaReporte
+  comentario        String?
+  estado            EstadoReporte        @default(pendiente)
+  resueltoPorId     Int?
+  resueltoPor       Usuario?             @relation("ReportesResueltos", fields: [resueltoPorId], references: [id])
+  notaResolucion    String?
+  resueltoAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([servicioId])
+  @@index([estado])
+  @@index([reportanteId])
 }

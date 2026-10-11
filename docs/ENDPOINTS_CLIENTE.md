@@ -250,3 +250,17 @@ Respuesta 200:
 Errores: 400 id o paginación inválidos · 401 no autenticado · 403 no eres cliente · 404 el técnico no existe, no está verificado o no tiene oficio
 Notas: orden de la más reciente a la más antigua. Se muestran solo reseñas **no ocultas**. El autor aparece como primer nombre + inicial del apellido (p. ej. `Ana T.`); nunca otros datos del cliente.
 Estado: listo
+
+### POST /reportes
+El cliente reporta al **técnico** de un servicio suyo. Solo se puede reportar desde servicios en estado `aceptado`, `completado` o `cancelado`.
+Auth: sí — rol `cliente`
+Body:
+{ "tipo_objetivo": "tecnico", "servicio_id": 1, "categoria": "trabajo_deficiente", "comentario": "El trabajo quedó incompleto" }
+- `tipo_objetivo`: para el cliente debe ser `tecnico` (con `servicio_id`).
+- `categoria` (una de): `no_se_presento`, `trabajo_deficiente`, `cobro_diferente`, `comportamiento_inapropiado`, `fraude`, `otro` (válidas contra el técnico).
+- `comentario`: hasta 500 caracteres; **obligatorio** si la categoría es `fraude` u `otro`.
+Respuesta 201:
+{ "data": { "reporte": { "id": 1, "tipoObjetivo": "tecnico", "categoria": "trabajo_deficiente", "comentario": "El trabajo quedó incompleto", "estado": "pendiente", "reportante": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "objetivo": { "tipo": "tecnico", "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "servicio": { "id": 1, "estado": "aceptado" }, "notaResolucion": null, "resueltoPor": null, "resueltoAt": null, "createdAt": "2026-10-11T09:00:00.000Z", "updatedAt": "2026-10-11T09:00:00.000Z" } } }
+Errores: 400 tipo de objetivo/categoría inválidos, falta el servicio, categoría que no corresponde al objetivo o comentario faltante/largo · 401 no autenticado · 403 no eres cliente ni técnico · 404 la solicitud no existe o no participaste en ella · 409 el servicio no está en un estado reportable o ya reportaste este objetivo en este servicio
+Notas: el reporte queda `pendiente` para que lo revise el admin; no genera sanciones automáticas. Un cliente **no** reporta reseñas (eso lo hace el técnico).
+Estado: listo

@@ -203,3 +203,19 @@ Respuesta 200:
 Errores: 400 estado o paginación inválidos · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil de técnico no encontrado
 Notas: cada ítem trae los mismos campos que `GET /servicios/:id` más `resena` (o `null`). La `direccion` sigue la regla del técnico (visible desde `aceptado`). Nunca se incluye correo ni teléfono del cliente. El técnico **no** puede reseñar al cliente.
 Estado: listo
+
+### POST /reportes
+El técnico reporta al **cliente** de un servicio suyo o una **reseña** que recibió en su perfil. Solo se puede reportar el cliente desde servicios en estado `aceptado`, `completado` o `cancelado`; la reseña siempre pertenece a un servicio completado.
+Auth: sí — rol `tecnico`
+Body (reportar al cliente):
+{ "tipo_objetivo": "cliente", "servicio_id": 1, "categoria": "no_estaba", "comentario": "No atendió en la dirección indicada" }
+Body (reportar una reseña):
+{ "tipo_objetivo": "resena", "resena_id": 1, "categoria": "contenido_inapropiado", "comentario": "La reseña es falsa" }
+- Categorías válidas contra el cliente: `no_estaba`, `comportamiento_inapropiado`, `fraude`, `otro`.
+- Categorías válidas contra una reseña: `contenido_inapropiado`, `fraude`, `otro`.
+- `comentario`: hasta 500 caracteres; **obligatorio** si la categoría es `fraude` u `otro`.
+Respuesta 201:
+{ "data": { "reporte": { "id": 2, "tipoObjetivo": "resena", "categoria": "contenido_inapropiado", "comentario": "La reseña es falsa", "estado": "pendiente", "reportante": { "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "objetivo": { "tipo": "resena", "id": 1, "calificacion": 1, "comentario": "Comentario ofensivo" }, "servicio": { "id": 1, "estado": "completado" }, "notaResolucion": null, "resueltoPor": null, "resueltoAt": null, "createdAt": "2026-10-11T09:05:00.000Z", "updatedAt": "2026-10-11T09:05:00.000Z" } } }
+Errores: 400 tipo de objetivo/categoría inválidos, falta el servicio o la reseña, categoría que no corresponde al objetivo o comentario faltante/largo · 401 no autenticado · 403 no eres técnico (ni cliente) · 404 el servicio o la reseña no existen o no son tuyos · 409 el servicio no está en un estado reportable o ya reportaste este objetivo
+Notas: el técnico solo puede reportar reseñas **recibidas** por él. El reporte queda `pendiente` para el admin; no genera sanciones automáticas.
+Estado: listo
