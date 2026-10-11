@@ -10,4 +10,35 @@ async function actualizarPerfil(req, res) {
   res.status(200).json({ data: { perfil } });
 }
 
-module.exports = { obtenerPerfil, actualizarPerfil };
+async function listarDocumentos(req, res) {
+  const documentos = await tecnicosService.listarDocumentos(req.usuario.id);
+  res.status(200).json({ data: { documentos } });
+}
+
+async function subirDocumento(req, res) {
+  const documento = await tecnicosService.subirDocumento(
+    req.usuario.id,
+    req.validated.params.tipo,
+    req.file,
+  );
+  res.status(201).json({ data: { documento } });
+}
+
+async function eliminarDocumento(req, res) {
+  await tecnicosService.eliminarDocumento(req.usuario.id, req.validated.params.id);
+  res.status(204).send();
+}
+
+async function enviarARevision(req, res) {
+  const resultado = await tecnicosService.enviarARevision(req.usuario.id);
+  res.status(200).json({ data: resultado });
+}
+
+module.exports = {
+  obtenerPerfil,
+  actualizarPerfil,
+  listarDocumentos,
+  subirDocumento,
+  eliminarDocumento,
+  enviarARevision,
+};

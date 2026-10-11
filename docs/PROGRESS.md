@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T5 — Subida de documentos de verificación (Cloudinary):** recibir documentos del técnico (Multer) y subirlos a Cloudinary. *(Pendiente de credenciales de Cloudinary.)*
+- **T6 — Admin: revisar, aprobar, observar o rechazar técnicos.**
 
-> **Tarea siguiente:** T6 — Admin: revisar, aprobar, observar o rechazar técnicos.
+> **Tarea siguiente:** T7 — Cliente: búsqueda, filtros y perfil público del técnico.
 
 ## Pendientes (en orden)
-- [ ] T6 — Admin: revisar, aprobar, observar o rechazar técnicos
 - [ ] T7 — Cliente: búsqueda, filtros y perfil público del técnico
 - [ ] T8 — Solicitud de servicio y estados del servicio
 - [ ] T9 — Chat en tiempo real (Socket.IO)
@@ -27,6 +26,7 @@
 - [x] **T1 — Registro y login con email y contraseña (JWT + bcrypt):** modelos `Usuario` y `Tecnico`, migración inicial, módulo `src/modules/auth` y endpoints por app. *(2026-10-11)*
 - [x] **T2 — Roles y middleware de permisos:** `src/middlewares/auth.js` con `autenticar` (verifica JWT → `req.usuario = { id, rol }`) y `autorizar(...roles)` (403 si el rol no está permitido); endpoint protegido `GET /auth/perfil`. *(2026-10-11)*
 - [x] **T4 — Perfil del técnico:** enums `Oficio` y `Distrito`, campos de perfil en `Tecnico`, módulo `src/modules/tecnicos` y endpoints `GET`/`PUT /tecnicos/perfil`. *(2026-10-11)*
+- [x] **T5 — Subida de documentos de verificación (Cloudinary):** enums `TipoDocumentoVerificacion`/`EstadoDocumento`, modelo `DocumentoVerificacion`, estados de revisión, Multer (memoria, 5 MB) y endpoints `GET`/`POST`/`DELETE /tecnicos/documentos` y `POST /tecnicos/verificacion/enviar`. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -60,16 +60,26 @@
 - **Identificadores ASCII:** `albanileria`, `victor_larco_herrera` (la app muestra la forma legible).
 - **Incidente:** tras la migración el cliente Prisma quedó desactualizado (`Unknown field oficio`); se resolvió con `npx prisma generate` (anotado en `DECISIONES.md`).
 
-## Verificaciones realizadas (T1 y T2)
+### T5
+- **Modelo:** nuevo modelo `DocumentoVerificacion` (1 técnico → N documentos) y enums `TipoDocumentoVerificacion { dni_frente, dni_reverso, selfie, cul, certificado_oficio }` y `EstadoDocumento { pendiente, aprobado, observado }`. `EstadoVerificacion` suma `en_revision`; `Tecnico` suma `documentosEnviadosAt` y relación `documentos`. Migración `20261011050754_documentos_verificacion`.
+- **Almacenamiento privado:** `src/config/cloudinary.js` con `subirPrivado` (`resource_type: "auto"`, `type: "private"`, carpeta `trabajoya/tecnicos/<id>/verificacion`), `urlPrivada` (`private_download_url` firmada) y `eliminarArchivo`.
+- **Subida:** `src/middlewares/upload.js` con Multer en memoria (campo `archivo`, 1 archivo, 5 MB); `LIMIT_FILE_SIZE` → `ApiError(400)`.
+- **Endpoints (rol `tecnico`):** `GET /tecnicos/documentos`, `POST /tecnicos/documentos/:tipo`, `DELETE /tecnicos/documentos/:id`, `POST /tecnicos/verificacion/enviar`.
+- **Reglas:** obligatorios `dni_frente`, `dni_reverso`, `selfie` (reemplazan el anterior); opcionales `cul`, `certificado_oficio` (se agregan). Formatos jpg/png/pdf, selfie solo jpg/png. Enviar exige los 3 obligatorios (si no, `400` con `detalles.faltantes`), pasa a `en_revision` + `documentosEnviadosAt`, reinicia documentos a `pendiente` y limpia `comentarioAdmin`. Mientras `en_revision` no se puede subir ni borrar.
+- **`ApiError` con `detalles`** para devolver la lista de faltantes; `PERFIL_SELECT` ahora incluye `documentosEnviadosAt`.
+
+## Verificaciones realizadas (T1, T2, T4 y T5)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
 - **T4** — `GET /tecnicos/perfil` (técnico sin completar) → 200 con `null`/`[]`; `PUT /tecnicos/perfil` válido → 200 y se refleja en el `GET`; oficio inválido, sin distritos, horas invertidas y día repetido → 400; como `cliente` → 403; sin token → 401. `npx prisma migrate dev --name perfil_tecnico` → migración `20261011031502_perfil_tecnico` aplicada.
-- Datos de prueba creados durante las pruebas fueron eliminados (0 usuarios, 0 técnicos restantes).
+- **T5** — subida real a Cloudinary: `GET /tecnicos/documentos` vacío → 200 `[]`; subir `selfie`/`dni_frente`/`dni_reverso` (png) y `cul` (pdf) → 201; la URL privada firmada devuelta responde 200; `selfie` en pdf → 400; tipo inválido → 400; sin archivo → 400; reemplazar `dni_frente` deja 1 solo registro; archivo de 6 MB → 400; enviar → 200 `en_revision` + `documentosEnviadosAt`; subir/borrar estando `en_revision` → 400; reenviar → 400; enviar sin los 3 obligatorios → 400 con `detalles.faltantes`; borrar documento propio → 204 y desaparece del listado; borrar inexistente → 404; como `cliente` → 403; sin token → 401.
+- Migración `20261011050754_documentos_verificacion` aplicada.
+- Datos de prueba creados durante las pruebas fueron eliminados (0 usuarios, 0 documentos restantes) y los archivos de prueba borrados de Cloudinary.
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*
 - [x] Secreto JWT *(`JWT_SECRET` en `.env`)*
 - [ ] Google OAuth: Client ID y Client Secret — **postergado, fuera del MVP** *(se pedirán cuando se haga T3)*
-- [ ] Cloudinary: cloud name, API key y API secret *(T5: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)*
+- [x] Cloudinary: cloud name, API key y API secret *(T5: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)* — **rotar credenciales** (se compartieron por chat).
 - [ ] Reglas de negocio: estados del servicio, verificación y comisión

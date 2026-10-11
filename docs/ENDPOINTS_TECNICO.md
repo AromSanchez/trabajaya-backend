@@ -31,7 +31,7 @@ Estado: listo
 Devuelve el perfil del técnico autenticado (aún puede estar sin completar: campos en `null`).
 Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
 Respuesta 200:
-{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "estadoVerificacion": "pendiente", "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
+{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "estadoVerificacion": "pendiente", "documentosEnviadosAt": null, "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
 Errores: 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
 Estado: listo
 
@@ -57,4 +57,38 @@ Valores válidos (los valida el backend):
 - `distritos`: trujillo | el_porvenir | florencia_de_mora | huanchaco | la_esperanza | laredo | moche | poroto | salaverry | simbal | victor_larco_herrera
 - `dia`: lunes | martes | miercoles | jueves | viernes | sabado | domingo · horas en formato `HH:MM`
 - `descripcion` es opcional · al menos un distrito y un día de disponibilidad · sin días repetidos
+Estado: listo
+
+### GET /tecnicos/documentos
+Devuelve los documentos de verificación del técnico autenticado. La `url` es una URL privada firmada y temporal; solo el dueño (y el admin) puede acceder al archivo.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 200:
+{ "data": { "documentos": [ { "id": 5, "tipo": "dni_frente", "formato": "png", "nombreOriginal": "dni_frente.png", "bytes": 204800, "estado": "pendiente", "comentarioAdmin": null, "url": "https://api.cloudinary.com/v1_1/<cloud>/image/download?timestamp=...&public_id=...&signature=...", "createdAt": "2026-10-11T05:11:05.766Z", "updatedAt": "2026-10-11T05:11:05.766Z" } ] } }
+Errores: 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
+Notas: `tipo` ∈ `dni_frente` | `dni_reverso` | `selfie` | `cul` | `certificado_oficio` · `estado` ∈ `pendiente` | `aprobado` | `observado`
+Estado: listo
+
+### POST /tecnicos/documentos/:tipo
+Sube un documento de verificación (un archivo por request). Los obligatorios (`dni_frente`, `dni_reverso`, `selfie`) reemplazan el anterior; los opcionales (`cul`, `certificado_oficio`) se agregan. No se permite subir mientras la verificación está `en_revision`.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Cuerpo: `multipart/form-data` con el campo `archivo`
+- Formatos: jpg, png, pdf · la `selfie` solo jpg o png · tamaño máximo 5 MB
+Respuesta 201:
+{ "data": { "documento": { "id": 6, "tipo": "selfie", "formato": "png", "nombreOriginal": "selfie.png", "bytes": 204800, "estado": "pendiente", "comentarioAdmin": null, "url": "https://api.cloudinary.com/v1_1/<cloud>/image/download?timestamp=...&public_id=...&signature=...", "createdAt": "2026-10-11T05:11:05.766Z", "updatedAt": "2026-10-11T05:11:05.766Z" } } }
+Errores: 400 tipo inválido / sin archivo / formato no permitido / selfie en pdf / archivo mayor a 5 MB / verificación en revisión · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### DELETE /tecnicos/documentos/:id
+Elimina un documento del propio técnico (y su archivo en Cloudinary). No se permite mientras la verificación está `en_revision`.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 204: sin cuerpo
+Errores: 400 verificación en revisión · 401 no autenticado / token inválido · 403 no eres técnico · 404 documento no encontrado
+Estado: listo
+
+### POST /tecnicos/verificacion/enviar
+Envía los documentos a revisión. Exige los tres obligatorios (`dni_frente`, `dni_reverso`, `selfie`). Al enviar, pasa `estadoVerificacion` de `pendiente`/`observado` a `en_revision`, guarda `documentosEnviadosAt` y reinicia el estado de los documentos a `pendiente` (limpia comentarios del admin).
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 200:
+{ "data": { "estadoVerificacion": "en_revision", "documentosEnviadosAt": "2026-10-11T05:11:05.766Z" } }
+Errores: 400 faltan documentos obligatorios (`detalles.faltantes`) / ya está en revisión · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
 Estado: listo

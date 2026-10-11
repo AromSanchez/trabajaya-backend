@@ -6,7 +6,11 @@ function notFound(_req, _res, next) {
 
 function errorHandler(err, _req, res, _next) {
   if (err instanceof ApiError) {
-    return res.status(err.status).json({ error: err.message });
+    const cuerpo = { error: err.message };
+    if (err.detalles) {
+      cuerpo.detalles = err.detalles;
+    }
+    return res.status(err.status).json(cuerpo);
   }
 
   console.error(err);

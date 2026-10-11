@@ -14,6 +14,7 @@ enum Rol {
 
 enum EstadoVerificacion {
   pendiente
+  en_revision
   aprobado
   observado
   rechazado
@@ -53,15 +54,49 @@ model Usuario {
 }
 
 model Tecnico {
-  id                 Int                @id @default(autoincrement())
-  usuarioId          Int                @unique
-  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  estadoVerificacion EstadoVerificacion @default(pendiente)
-  oficio             Oficio?
-  descripcion        String?
-  aniosExperiencia   Int?
-  distritos          Distrito[]
-  disponibilidad     Json?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                  Int                    @id @default(autoincrement())
+  usuarioId           Int                    @unique
+  usuario             Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  estadoVerificacion  EstadoVerificacion     @default(pendiente)
+  documentosEnviadosAt DateTime?
+  oficio              Oficio?
+  descripcion         String?
+  aniosExperiencia    Int?
+  distritos           Distrito[]
+  disponibilidad      Json?
+  documentos          DocumentoVerificacion[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+}
+
+enum TipoDocumentoVerificacion {
+  dni_frente
+  dni_reverso
+  selfie
+  cul
+  certificado_oficio
+}
+
+enum EstadoDocumento {
+  pendiente
+  aprobado
+  observado
+}
+
+model DocumentoVerificacion {
+  id              Int                       @id @default(autoincrement())
+  tecnicoId       Int
+  tecnico         Tecnico                   @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  tipo            TipoDocumentoVerificacion
+  publicId        String
+  resourceType    String
+  formato         String
+  nombreOriginal  String
+  bytes           Int
+  estado          EstadoDocumento           @default(pendiente)
+  comentarioAdmin String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([tecnicoId])
 }

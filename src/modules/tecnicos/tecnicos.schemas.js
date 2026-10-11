@@ -16,6 +16,9 @@ const DISTRITOS = [
 ];
 const DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
 
+const TIPOS_DOCUMENTO = ["dni_frente", "dni_reverso", "selfie", "cul", "certificado_oficio"];
+const DOCUMENTOS_OBLIGATORIOS = ["dni_frente", "dni_reverso", "selfie"];
+
 const horaRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const disponibilidadSchema = z
@@ -56,4 +59,25 @@ const actualizarPerfilSchema = z.object({
   }),
 });
 
-module.exports = { actualizarPerfilSchema, OFICIOS, DISTRITOS, DIAS };
+const tipoDocumentoSchema = z.object({
+  params: z.object({
+    tipo: z.enum(TIPOS_DOCUMENTO, { message: "Tipo de documento inválido" }),
+  }),
+});
+
+const documentoIdSchema = z.object({
+  params: z.object({
+    id: z.coerce.number("Id inválido").int("Id inválido").positive("Id inválido"),
+  }),
+});
+
+module.exports = {
+  actualizarPerfilSchema,
+  tipoDocumentoSchema,
+  documentoIdSchema,
+  OFICIOS,
+  DISTRITOS,
+  DIAS,
+  TIPOS_DOCUMENTO,
+  DOCUMENTOS_OBLIGATORIOS,
+};
