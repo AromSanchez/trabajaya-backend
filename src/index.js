@@ -8,6 +8,7 @@ const adminRoutes = require("./modules/admin/admin.routes");
 const oficiosRoutes = require("./modules/oficios/oficios.routes");
 const serviciosRoutes = require("./modules/servicios/servicios.routes");
 const chatRoutes = require("./modules/chat/chat.routes");
+const resenasRoutes = require("./modules/resenas/resenas.routes");
 const { inicializarSocket } = require("./config/socket");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
@@ -26,6 +27,9 @@ app.use("/admin", adminRoutes);
 app.use("/oficios", oficiosRoutes);
 app.use("/servicios", serviciosRoutes);
 app.use("/chat", chatRoutes);
+app.use("/tecnicos", resenasRoutes.publicas);
+app.use("/cliente", resenasRoutes.cliente);
+app.use("/tecnico", resenasRoutes.tecnico);
 
 app.use(notFound);
 app.use(errorHandler);

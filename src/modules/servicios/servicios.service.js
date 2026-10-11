@@ -434,6 +434,10 @@ async function completar(usuario, id) {
         completadoAt: new Date(),
       },
     });
+    await tx.tecnico.update({
+      where: { id: servicio.tecnicoId },
+      data: { serviciosCompletados: { increment: 1 } },
+    });
   });
 
   return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
@@ -586,6 +590,7 @@ async function obtenerServicioParaActor(usuario, id) {
       id: true,
       estado: true,
       fechaHora: true,
+      tecnicoId: true,
       cliente: { select: { id: true } },
       tecnico: { select: { usuario: { select: { id: true } } } },
     },
@@ -616,4 +621,6 @@ module.exports = {
   aceptarPropuesta,
   rechazarPropuesta,
   expirarPendientes,
+  serializar,
+  SERVICIO_SELECT,
 };

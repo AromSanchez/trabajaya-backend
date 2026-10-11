@@ -1,6 +1,7 @@
 const prisma = require("../../config/prisma");
 const ApiError = require("../../config/ApiError");
 const { urlPrivada } = require("../../config/cloudinary");
+const { recalcularReputacion } = require("../resenas/resenas.service");
 
 const TECNICO_SELECT = {
   id: true,
@@ -201,6 +202,44 @@ async function listarCancelacionesTardias() {
   return [...acumulado.values()].sort((a, b) => b.cancelacionesTardias - a.cancelacionesTardias);
 }
 
+async function ocultarResena(adminId, resenaId, motivo) {
+  const resena = await prisma.resena.findUnique({
+    where: { id: resenaId },
+    select: { id: true, tecnicoId: true, oculta: true },
+  });
+
+  if (!resena) {
+    throw new ApiError(404, "Reseña no encontrada");
+  }
+  if (resena.oculta) {
+    throw new ApiError(409, "La reseña ya está oculta");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const actualizada = await tx.resena.update({
+      where: { id: resenaId },
+      data: {
+        oculta: true,
+        motivoOcultamiento: motivo,
+        ocultadaPorId: adminId,
+        ocultadaAt: new Date(),
+      },
+      select: {
+        id: true,
+        servicioId: true,
+        calificacion: true,
+        comentario: true,
+        oculta: true,
+        motivoOcultamiento: true,
+        ocultadaAt: true,
+      },
+    });
+
+    await recalcularReputacion(tx, resena.tecnicoId);
+    return actualizada;
+  });
+}
+
 module.exports = {
   listarTecnicos,
   obtenerTecnicoDetalle,
@@ -211,4 +250,5 @@ module.exports = {
   reactivar,
   marcarDocumento,
   listarCancelacionesTardias,
+  ocultarResena,
 };

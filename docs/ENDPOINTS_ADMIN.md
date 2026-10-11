@@ -105,4 +105,15 @@ Respuesta 200:
 Errores: 401 no autenticado / token inválido · 403 no eres admin
 Estado: listo
 
+### POST /admin/resenas/:id/ocultar
+Oculta una reseña **sin borrarla** (moderación por reportes). El motivo es obligatorio. Al ocultarla, el promedio y el número de reseñas del técnico se recalculan sin contar las ocultas, y la reseña deja de aparecer en `GET /tecnicos/:id/resenas`.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Body:
+{ "motivo": "Contenido inapropiado" }
+Respuesta 200:
+{ "data": { "resena": { "id": 1, "servicioId": 1, "calificacion": 1, "comentario": "Comentario ofensivo", "oculta": true, "motivoOcultamiento": "Contenido inapropiado", "ocultadaAt": "2026-10-11T09:00:00.000Z" } } }
+Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 no eres admin · 404 reseña no encontrada · 409 la reseña ya está oculta
+Nota: ocultar no elimina la reseña; queda registrada con quién la ocultó (`ocultadaPorId`), cuándo (`ocultadaAt`) y por qué (`motivoOcultamiento`). El flujo de reportes de reseñas llega en T11.
+Estado: listo
+
 Nota (sin endpoint propio): el admin puede ver el detalle de un servicio con `GET /servicios/:id` (incluye `montoAcordado`, `alcanceAcordado` y `propuestas`), pero **no** tiene acceso a las conversaciones del chat (`GET/POST /chat/servicios/:id/mensajes` responden `403` para el rol `admin`); el chat es privado entre cliente y técnico.

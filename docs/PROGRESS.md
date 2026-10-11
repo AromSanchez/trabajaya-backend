@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T10 — Reseñas (solo tras servicio completado) e historial.**
+- **T11 — Reportes de incidencias.**
 
-> **Tarea siguiente:** T11 — Reportes de incidencias.
+> **Tarea siguiente:** T12 — Favoritos y notificaciones.
 
 ## Pendientes (en orden)
-- [ ] T11 — Reportes de incidencias
 - [ ] T12 — Favoritos y notificaciones
 - [ ] T13 — Datos de prueba
 
@@ -27,6 +26,7 @@
 - [x] **T7 — Cliente: búsqueda, filtros y perfil público del técnico:** campos `especialidades` y `disponible` en `Tecnico`, módulo `src/modules/oficios` (catálogo de especialidades) y endpoints `GET /tecnicos` (búsqueda con filtros y paginación), `GET /tecnicos/:id` (perfil público) y `GET /oficios/:id/especialidades`. *(2026-10-11)*
 - [x] **T8 — Solicitud de servicio y estados del servicio:** enums `EstadoServicio`/`RolActor`, modelos `Servicio`, `FotoServicio`, `HistorialServicio` y `Configuracion`, módulo `src/modules/servicios` con crear/listar/ver, aceptar/rechazar/completar/cancelar y expiración automática a las 24 h, y endpoint admin `GET /admin/cancelaciones-tardias`. *(2026-10-11)*
 - [x] **T9 — Chat en tiempo real (Socket.IO) y acuerdo de precio/alcance:** modelos `Mensaje` y `Propuesta` y enum `EstadoPropuesta`, campos `montoAcordado`/`alcanceAcordado` en `Servicio`, módulo `src/modules/chat` (historial y envío REST), Socket.IO con autenticación JWT y salas por servicio, y endpoints de propuesta (`crear`/`aceptar`/`rechazar`). *(2026-10-11)*
+- [x] **T10 — Reseñas (solo tras servicio completado) e historial:** modelo `Resena` y campos de reputación en `Tecnico` (`calificacionPromedio`, `totalResenas`, `serviciosCompletados`), módulo `src/modules/resenas` (crear reseña, listado público e historial por rol), recalculo de reputación en transacción, orden de búsqueda por calificación y ocultación de reseñas por el admin. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -107,7 +107,17 @@
 - **Precio/alcance:** el **técnico propone** (`POST /servicios/:id/propuesta` con `monto` y `alcance`) y el **cliente acepta** (`.../propuesta/aceptar`) o **rechaza** (`.../propuesta/rechazar`, motivo opcional). Al aceptar se guardan `montoAcordado` y `alcanceAcordado` en el servicio; aceptar **no** cambia el estado del servicio. Solo hay **una propuesta pendiente** a la vez: si el técnico envía otra, la pendiente anterior queda `rechazada` con motivo "Reemplazada por una nueva propuesta". Se puede proponer solo en `pendiente`/`aceptado`. La comisión sigue siendo 0 y **no** se calcula monto de comisión todavía.
 - **Dependencias:** `socket.io` (runtime) y `socket.io-client` (dev, solo para pruebas).
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8 y T9)
+### T10
+- **Modelo:** nuevo modelo `Resena` (`servicioId` único, `clienteId`, `tecnicoId`, `calificacion`, `comentario?`, `oculta` + `motivoOcultamiento`/`ocultadaPorId`/`ocultadaAt` para moderación; índice `[tecnicoId, oculta]`). `Tecnico` suma `calificacionPromedio Float?`, `totalResenas Int` (0), `serviciosCompletados Int` (0) y relación `resenas`; `Servicio` suma `resena Resena?`; `Usuario` suma `resenasCliente`/`resenasOcultadas`. Migración `20261011070122_resenas` (aditiva).
+- **Módulo `src/modules/resenas`:** exporta tres routers montados en `index.js`: `/cliente` (`POST /servicios/:id/resena`, `GET /servicios/historial`), `/tecnico` (`GET /servicios/historial`) y `/tecnicos` (`GET /:id/resenas`). El endpoint de ocultar vive en el módulo admin (importa `recalcularReputacion` de `resenas.service`).
+- **Reglas:** solo el **cliente dueño** reseña; solo servicios **`completado`** (`409` si no); **una reseña por servicio** (`409` si repite), no editable; `calificacion` entera 1–5 (obligatoria) y `comentario` ≤ 500 (opcional). El técnico no califica al cliente.
+- **Reputación:** al crear la reseña se recalcula en la **misma transacción** `calificacionPromedio` (media de no ocultas, 2 decimales, `null` si no hay) y `totalResenas`. `serviciosCompletados` se incrementa al completar el servicio (en `servicios.completar`). Los tres valores alimentan el perfil público y la búsqueda.
+- **Búsqueda:** nuevo orden `disponible` desc → `calificacionPromedio` desc (nulls al final) → `serviciosCompletados` desc → `aniosExperiencia` desc (nulls al final) → `id` asc. `GET /tecnicos` y `GET /tecnicos/:id` ya devuelven la reputación real (ya no `null`/`0` fijos).
+- **Historial:** `GET /cliente/servicios/historial` y `GET /tecnico/servicios/historial` (paginados, `page` default 1, `limit` default 20 tope 50, más reciente primero; filtro opcional `estado`). Reutilizan `serializar` y `SERVICIO_SELECT` de `servicios.service` (misma regla de visibilidad de la dirección) y agregan `resena`.
+- **Reseñas públicas:** `GET /tecnicos/:id/resenas` (solo `cliente`; el técnico debe estar `verificado` y con `oficio`, si no `404`); muestra calificación, comentario, fecha y el autor como **primer nombre + inicial del apellido** (`"Ana T."`).
+- **Moderación:** `POST /admin/resenas/:id/ocultar` (motivo obligatorio) marca la reseña como oculta sin borrarla y recalcula la reputación sin las ocultas. Ocultar dos veces → `409`; ya oculta deja de aparecer en el listado público.
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9 y T10)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -126,6 +136,9 @@
 - Migración `20261011064613_chat_propuestas` aplicada.
 - **T9** — con cliente, técnico verificado y un segundo cliente (setup por BD) y el admin sembrado: **propuesta** — cliente no puede proponer → 403; técnico propone → 201 con una propuesta `pendiente` y `montoAcordado: null`; técnico no puede aceptar → 403; cliente acepta → 200 con `montoAcordado`/`alcanceAcordado` guardados y la propuesta `aceptada`; aceptar sin pendiente → 404; nueva propuesta reemplaza la pendiente anterior (queda una sola `pendiente`); cliente rechaza → 200 con `motivoRechazo`; rechazar sin pendiente → 404; `monto` negativo → 400; `alcance` vacío → 400. **Chat REST** — cliente y técnico envían → 201; listar → 200 con 2 mensajes en orden ascendente y `paginacion.total: 2`; otro cliente → 404 (leer y enviar); sin token → 401; admin → 403; mensaje vacío y > 1000 → 400. **Socket.IO real** — cliente y técnico conectan; sin token no conecta; ambos se unen a la sala (`servicio:unirse` → `{ ok: true }`); otro cliente no se une (`error`); cliente envía y el técnico recibe `mensaje:nuevo`; mensaje vacío y servicio inexistente devuelven error. **Cierre** — cliente cancela el servicio → 200; enviar por REST y por socket tras cancelar → error (`409` / `mensaje:error`). Resultado: 45/45 comprobaciones correctas.
 - Datos de prueba de T9 eliminados (quedan solo el admin y 0 técnicos/servicios/mensajes/propuestas).
+- Migración `20261011070122_resenas` aplicada.
+- **T10** — con cliente, segundo cliente, técnico verificado (setup por BD) y el admin sembrado: reseñar sin completar → `409`; calificación `0` y `6` → `400`; otro cliente → `404`; técnico en ruta de cliente → `403`. Crear reseña válida → `201`, técnico `calificacionPromedio: 5` y `totalResenas: 1`; repetir → `409`. `GET /tecnicos/:id/resenas` → `200` con autor `"Ana T."`; `GET /tecnicos/:id` y `GET /tecnicos?oficio=...` devuelven promedio `5`, total `1` y `serviciosCompletados: 1` (el completar incrementó el contador). Historial cliente/técnico → `200` con la reseña adjunta y la `direccion` correcta; filtro `estado=cancelado` → lista vacía; autorización cruzada → `403`; sin token → `401`; reseñas públicas sin rol cliente → `403`/`401`; técnico inexistente → `404`. Admin oculta → `200`, promedio `null` y total `0`, listado público `0`; ocultar de nuevo → `409`; inexistente → `404`; sin motivo → `400`; como cliente → `403`. Resultado: **46/46 comprobaciones correctas**.
+- Datos de prueba de T10 eliminados (queda solo el admin; 0 técnicos/servicios/resenas/mensajes).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*

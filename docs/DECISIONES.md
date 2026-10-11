@@ -93,6 +93,17 @@
 - **Precio y alcance:** el **técnico propone** `monto` y `alcance`; el **cliente acepta** o **rechaza** (motivo opcional). Al aceptar se copian a `Servicio.montoAcordado` y `Servicio.alcanceAcordado`. Aceptar **no** cambia el estado del servicio. Solo puede haber **una propuesta pendiente** a la vez: al proponer de nuevo, la anterior queda `rechazada` ("Reemplazada por una nueva propuesta"). Se puede proponer solo en `pendiente`/`aceptado`.
 - **Comisión:** sigue en 0 (beta). Con un `montoAcordado` la comisión monetaria **ya podría calcularse** más adelante, pero no se hace todavía.
 
+### Reseñas e historial (T10)
+- **Quién califica a quién:** solo el **cliente dueño** califica al **técnico** de un servicio. El técnico **no** califica al cliente en el MVP.
+- **Solo servicios `completado`:** no se puede reseñar una solicitud en otro estado (`409`).
+- **Una reseña por servicio, no editable:** se guarda una sola vez (relación 1:1 con `Servicio` mediante `servicioId` único) y no se puede editar ni borrar.
+- **Contenido:** `calificacion` entera de **1 a 5** (obligatoria) y `comentario` de hasta 500 caracteres (opcional).
+- **Reputación persistida:** al crear (u ocultar) una reseña, el backend recalcula en **una sola transacción** `Tecnico.calificacionPromedio` (media de las reseñas visibles, redondeada a 2 decimales; `null` si no hay) y `Tecnico.totalResenas`. `Tecnico.serviciosCompletados` se incrementa al completar un servicio. Estos tres valores son los que muestra el perfil público y usa la búsqueda (T7).
+- **Historial:** `GET /cliente/servicios/historial` y `GET /tecnico/servicios/historial` listan los servicios del usuario (todos los estados, con filtro opcional por `estado`), paginados, cada uno con la reseña asociada. Cada usuario ve solo los suyos.
+- **Reseñas en el perfil público:** `GET /tecnicos/:id/resenas` (solo rol `cliente`) lista las reseñas **no ocultas** de un técnico verificado, de la más reciente a la más antigua. El autor aparece como primer nombre + inicial del apellido (`"Ana T."`); nunca otros datos del cliente.
+- **Moderación:** el admin puede **ocultar** una reseña con motivo obligatorio (`POST /admin/resenas/:id/ocultar`), **sin borrarla**; al ocultarla, el promedio se recalcula sin contar las ocultas y deja de aparecer en el listado público. El flujo de *reportes* de reseñas llega en T11; la ocultación ya queda disponible.
+- **Comisión:** T10 no toca la comisión; sigue en 0.
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -162,5 +173,14 @@
 - **Modelos:** `Mensaje` (indexado por `[servicioId, createdAt]`) y `Propuesta`. `Servicio` gana `montoAcordado`/`alcanceAcordado` y relaciones `mensajes`/`propuestas`. Migración `20261011064613_chat_propuestas` (aditiva).
 - **Propuestas:** solo una `pendiente` por servicio; el técnico puede reemplazarla (la anterior pasa a `rechazada`). Al aceptar, la propuesta queda `aceptada`, se registra quién respondió y se copian `monto`/`alcance` al servicio, todo en una transacción.
 - **Dependencias:** `socket.io` en runtime; `socket.io-client` como `devDependency` solo para las pruebas.
+
+### Reseñas e historial (T10)
+- **Modelo `Resena`:** `servicioId` **único** (una por servicio, `onDelete: Cascade`), `clienteId`, `tecnicoId`, `calificacion`, `comentario?` y campos de moderación `oculta` (default `false`), `motivoOcultamiento?`, `ocultadaPorId?`, `ocultadaAt?`; índice `[tecnicoId, oculta]`. `Tecnico` suma `calificacionPromedio Float?`, `totalResenas Int` (default `0`), `serviciosCompletados Int` (default `0`) y relación `resenas`; `Servicio` suma `resena Resena?`; `Usuario` suma `resenasCliente`/`resenasOcultadas`. Migración `20261011070122_resenas` (aditiva).
+- **Recálculo con `aggregate`:** `recalcularReputacion(tx, tecnicoId)` usa `tx.resena.aggregate({ where: { tecnicoId, oculta: false }, _avg: { calificacion }, _count: { _all } })` y actualiza el técnico. Se ejecuta dentro de la **misma transacción** al crear la reseña y al ocultarla.
+- **Rutas nuevas:** el módulo `resenas` exporta tres routers: `cliente` (montado en `/cliente`), `tecnico` (montado en `/tecnico`) y `publicas` (montado en `/tecnicos`, ruta `/:id/resenas`). No choca con `GET /tecnicos/:id` porque `/:id` no captura dos segmentos.
+- **Reutilización de serialización:** el historial reutiliza `serializar` y `SERVICIO_SELECT` (exportados por `servicios.service`) para mantener idéntica la regla de visibilidad de la `direccion`, y agrega el campo `resena`. `servicios.completar` incrementa `serviciosCompletados` en la misma transacción.
+- **Ocultar desde el módulo admin:** `admin.service` importa `recalcularReputacion` de `resenas.service` para recalcular en la transacción de la ocultación (no hay dependencia circular: `resenas` no requiere `admin`).
+- **Orden de búsqueda actualizado:** `disponible` desc → `calificacionPromedio` desc (`nulls: last`) → `serviciosCompletados` desc → `aniosExperiencia` desc (`nulls: last`) → `id` asc en `GET /tecnicos`.
+- **Nombre público del autor:** helper que toma el primer nombre y la inicial del último apellido (`"Ana Torres"` → `"Ana T."`).
 
 

@@ -70,6 +70,15 @@ async function listarCancelacionesTardias(_req, res) {
   res.status(200).json({ data: { usuarios } });
 }
 
+async function ocultarResena(req, res) {
+  const resena = await adminService.ocultarResena(
+    req.usuario.id,
+    req.validated.params.id,
+    req.validated.body.motivo,
+  );
+  res.status(200).json({ data: { resena } });
+}
+
 module.exports = {
   listarTecnicos,
   obtenerTecnico,
@@ -80,4 +89,5 @@ module.exports = {
   suspender,
   reactivar,
   listarCancelacionesTardias,
+  ocultarResena,
 };

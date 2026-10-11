@@ -62,11 +62,23 @@ const motivoSchema = z.object({
   }),
 });
 
+const ocultarResenaSchema = z.object({
+  params: z.object({ id: idPositivo }),
+  body: z.object({
+    motivo: z
+      .string({ message: "El motivo es obligatorio" })
+      .trim()
+      .min(1, "El motivo es obligatorio")
+      .max(500, "El motivo es demasiado largo"),
+  }),
+});
+
 module.exports = {
   listarTecnicosSchema,
   tecnicoIdSchema,
   marcarDocumentoSchema,
   decisionSchema,
   motivoSchema,
+  ocultarResenaSchema,
   ESTADOS_VERIFICACION,
 };

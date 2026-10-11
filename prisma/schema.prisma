@@ -86,6 +86,8 @@ model Usuario {
   mensajes              Mensaje[]
   propuestasCreadas     Propuesta[]             @relation("PropuestasCreadas")
   propuestasRespondidas Propuesta[]             @relation("PropuestasRespondidas")
+  resenasCliente        Resena[]                @relation("ResenasCliente")
+  resenasOcultadas      Resena[]                @relation("ResenasOcultadas")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -106,6 +108,10 @@ model Tecnico {
   documentos          DocumentoVerificacion[]
   historial           HistorialVerificacion[]
   servicios           Servicio[]
+  resenas             Resena[]
+  calificacionPromedio Float?
+  totalResenas        Int                     @default(0)
+  serviciosCompletados Int                    @default(0)
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 }
@@ -188,6 +194,7 @@ model Servicio {
   historial          HistorialServicio[]
   mensajes           Mensaje[]
   propuestas         Propuesta[]
+  resena             Resena?
 
   @@index([clienteId])
   @@index([tecnicoId])
@@ -252,4 +259,25 @@ model Propuesta {
   updatedAt       DateTime        @updatedAt
 
   @@index([servicioId])
+}
+
+model Resena {
+  id                 Int       @id @default(autoincrement())
+  servicioId         Int       @unique
+  servicio           Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  clienteId          Int
+  cliente            Usuario   @relation("ResenasCliente", fields: [clienteId], references: [id])
+  tecnicoId          Int
+  tecnico            Tecnico   @relation(fields: [tecnicoId], references: [id])
+  calificacion       Int
+  comentario         String?
+  oculta             Boolean   @default(false)
+  motivoOcultamiento String?
+  ocultadaPorId      Int?
+  ocultadaPor        Usuario?  @relation("ResenasOcultadas", fields: [ocultadaPorId], references: [id])
+  ocultadaAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tecnicoId, oculta])
 }

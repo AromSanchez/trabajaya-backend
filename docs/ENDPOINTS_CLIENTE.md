@@ -57,7 +57,7 @@ Respuesta 200:
     "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 }
   }
 }
-Notas: orden = disponible primero, luego más años de experiencia. `calificacionPromedio` es `null` y los contadores son `0` hasta que existan reseñas (T10) y servicios (T8). Una página fuera de rango devuelve `tecnicos: []`.
+Notas: orden = `disponible` primero, luego mayor `calificacionPromedio` (los sin reseñas al final), luego más `serviciosCompletados`, luego más años de experiencia. `calificacionPromedio` es `null` mientras no haya reseñas visibles. Una página fuera de rango devuelve `tecnicos: []`.
 Errores: 400 oficio/distrito/página/límite inválidos · 401 no autenticado · 403 si no es `cliente`
 Estado: listo
 
@@ -85,7 +85,7 @@ Respuesta 200:
     }
   }
 }
-Notas: no incluye correo, teléfono, dirección, DNI, selfie ni documentos. `disponibilidad` es el horario semanal; `disponible` es el estado actual. `calificacionPromedio` es `null` y los contadores son `0` hasta T8/T10.
+Notas: no incluye correo, teléfono, dirección, DNI, selfie ni documentos. `disponibilidad` es el horario semanal; `disponible` es el estado actual. `calificacionPromedio` es `null` mientras no haya reseñas visibles; `totalResenas` y `serviciosCompletados` se calculan con las reseñas visibles y los servicios completados.
 Errores: 400 id inválido · 401 no autenticado · 403 si no es `cliente` · 404 el técnico no existe, no está verificado o no tiene oficio
 Estado: listo
 
@@ -218,4 +218,35 @@ Conexión con `io(url, { auth: { token } })` usando el JWT del login. Sin token 
 - Emitir `mensaje:enviar` `{ "servicio_id": 1, "contenido": "..." }` → callback `{ "ok": true, "mensaje": { ... } }` o `{ "error": "..." }`.
 - Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }` (llega a todos los conectados a la sala).
 - Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }` cuando una operación falla.
+Estado: listo
+
+### POST /cliente/servicios/:id/resena
+El cliente califica al técnico de un servicio **completado**. Una sola reseña por servicio; no se edita ni se borra. Al crearla, el backend recalcula en una transacción el promedio y el número de reseñas del técnico.
+Auth: sí — rol `cliente` (dueño del servicio)
+Body:
+{ "calificacion": 5, "comentario": "Excelente trabajo" }
+`calificacion`: entero de 1 a 5 (obligatorio) · `comentario`: texto de hasta 500 caracteres (opcional)
+Respuesta 201:
+{ "data": { "resena": { "id": 1, "calificacion": 5, "comentario": "Excelente trabajo", "createdAt": "2026-10-11T08:00:00.000Z" } } }
+Errores: 400 datos inválidos / calificación fuera de 1-5 / comentario demasiado largo · 401 no autenticado · 403 no eres cliente · 404 la solicitud no existe o no es tuya · 409 el servicio no está `completado` o ya calificaste este servicio
+Estado: listo
+
+### GET /cliente/servicios/historial
+Historial de los servicios del cliente (todos los estados), cada uno con su reseña si existe. Paginado, del más reciente al más antiguo.
+Auth: sí — rol `cliente`
+Query (opcional): `estado` ∈ `pendiente` | `aceptado` | `completado` | `rechazado` | `cancelado` | `expirado` · `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{ "data": { "servicios": [ { "id": 1, "estado": "completado", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "montoAcordado": 150.5, "alcanceAcordado": "Cambiar tomacorrientes", "resena": { "id": 1, "calificacion": 5, "comentario": "Excelente trabajo", "createdAt": "2026-10-11T08:00:00.000Z" } } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 estado o paginación inválidos · 401 no autenticado · 403 no eres cliente
+Notas: cada ítem trae los mismos campos que `GET /servicios/:id` más `resena` (o `null`). El cliente siempre ve la `direccion`. Una página fuera de rango devuelve `servicios: []`.
+Estado: listo
+
+### GET /tecnicos/:id/resenas
+Lista paginada de las reseñas visibles de un técnico verificado. Solo rol `cliente`.
+Auth: sí — rol `cliente`
+Query (opcional): `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{ "data": { "resenas": [ { "id": 1, "calificacion": 5, "comentario": "Excelente trabajo", "cliente": "Ana T.", "createdAt": "2026-10-11T08:00:00.000Z" } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 id o paginación inválidos · 401 no autenticado · 403 no eres cliente · 404 el técnico no existe, no está verificado o no tiene oficio
+Notas: orden de la más reciente a la más antigua. Se muestran solo reseñas **no ocultas**. El autor aparece como primer nombre + inicial del apellido (p. ej. `Ana T.`); nunca otros datos del cliente.
 Estado: listo

@@ -193,3 +193,13 @@ Conectar con `io(url, { auth: { token } })` usando el JWT del login. Sin token o
 - Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }`.
 - Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }`.
 Estado: listo
+
+### GET /tecnico/servicios/historial
+Historial de los servicios asignados al técnico (todos los estados), cada uno con la reseña recibida si existe. Paginado, del más reciente al más antiguo.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Query (opcional): `estado` ∈ `pendiente` | `aceptado` | `completado` | `rechazado` | `cancelado` | `expirado` · `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{ "data": { "servicios": [ { "id": 1, "estado": "completado", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "montoAcordado": 150.5, "alcanceAcordado": "Cambiar tomacorrientes", "resena": { "id": 1, "calificacion": 5, "comentario": "Excelente trabajo", "createdAt": "2026-10-11T08:00:00.000Z" } } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 estado o paginación inválidos · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil de técnico no encontrado
+Notas: cada ítem trae los mismos campos que `GET /servicios/:id` más `resena` (o `null`). La `direccion` sigue la regla del técnico (visible desde `aceptado`). Nunca se incluye correo ni teléfono del cliente. El técnico **no** puede reseñar al cliente.
+Estado: listo

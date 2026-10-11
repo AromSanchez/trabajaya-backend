@@ -234,6 +234,9 @@ const DATOS_PUBLICOS_SELECT = {
   especialidades: true,
   distritos: true,
   disponible: true,
+  calificacionPromedio: true,
+  totalResenas: true,
+  serviciosCompletados: true,
   usuario: { select: { nombre: true } },
 };
 
@@ -247,9 +250,9 @@ function tecnicoResumen(tecnico) {
     distritos: tecnico.distritos,
     disponible: tecnico.disponible,
     verificado: true,
-    calificacionPromedio: null,
-    totalResenas: 0,
-    serviciosCompletados: 0,
+    calificacionPromedio: tecnico.calificacionPromedio ?? null,
+    totalResenas: tecnico.totalResenas,
+    serviciosCompletados: tecnico.serviciosCompletados,
   };
 }
 
@@ -277,6 +280,8 @@ async function buscarTecnicos({ oficio, distrito, nombre, page = 1, limit } = {}
       where,
       orderBy: [
         { disponible: "desc" },
+        { calificacionPromedio: { sort: "desc", nulls: "last" } },
+        { serviciosCompletados: "desc" },
         { aniosExperiencia: { sort: "desc", nulls: "last" } },
         { id: "asc" },
       ],

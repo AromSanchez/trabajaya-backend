@@ -7,6 +7,7 @@ const {
   marcarDocumentoSchema,
   decisionSchema,
   motivoSchema,
+  ocultarResenaSchema,
 } = require("./admin.schemas");
 const controller = require("./admin.controller");
 
@@ -30,5 +31,7 @@ router.post("/tecnicos/:id/observar", validate(decisionSchema), controller.obser
 router.post("/tecnicos/:id/rechazar", validate(decisionSchema), controller.rechazar);
 router.post("/tecnicos/:id/suspender", validate(motivoSchema), controller.suspender);
 router.post("/tecnicos/:id/reactivar", validate(motivoSchema), controller.reactivar);
+
+router.post("/resenas/:id/ocultar", validate(ocultarResenaSchema), controller.ocultarResena);
 
 module.exports = router;
