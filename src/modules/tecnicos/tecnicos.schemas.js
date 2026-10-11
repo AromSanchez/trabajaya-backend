@@ -19,7 +19,23 @@ const DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "do
 const TIPOS_DOCUMENTO = ["dni_frente", "dni_reverso", "selfie", "cul", "certificado_oficio"];
 const DOCUMENTOS_OBLIGATORIOS = ["dni_frente", "dni_reverso", "selfie"];
 
+const ESPECIALIDADES_MAX = 5;
+const ESPECIALIDAD_LARGO_MAX = 40;
+
 const horaRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const especialidadesSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, "La especialidad no puede estar vacía")
+      .max(ESPECIALIDAD_LARGO_MAX, `Cada especialidad debe tener máximo ${ESPECIALIDAD_LARGO_MAX} caracteres`),
+  )
+  .max(ESPECIALIDADES_MAX, `Puedes agregar hasta ${ESPECIALIDADES_MAX} especialidades`)
+  .refine((lista) => new Set(lista).size === lista.length, {
+    message: "No repitas especialidades",
+  });
 
 const disponibilidadSchema = z
   .array(
@@ -56,6 +72,29 @@ const actualizarPerfilSchema = z.object({
       .min(1, "Selecciona al menos un distrito")
       .max(DISTRITOS.length),
     disponibilidad: disponibilidadSchema,
+    especialidades: especialidadesSchema.optional(),
+    disponible: z.boolean({ message: "Disponible debe ser verdadero o falso" }).optional(),
+  }),
+});
+
+const buscarTecnicosSchema = z.object({
+  query: z.object({
+    oficio: z.enum(OFICIOS, { message: "Oficio inválido" }).optional(),
+    distrito: z.enum(DISTRITOS, { message: "Distrito inválido" }).optional(),
+    nombre: z
+      .string()
+      .trim()
+      .min(1, "El nombre no puede estar vacío")
+      .max(100, "El nombre es demasiado largo")
+      .optional(),
+    page: z.coerce.number().int().min(1, "Página inválida").default(1),
+    limit: z.coerce.number().int().min(1, "Límite inválido").optional(),
+  }),
+});
+
+const perfilPublicoSchema = z.object({
+  params: z.object({
+    id: z.coerce.number("Id inválido").int("Id inválido").positive("Id inválido"),
   }),
 });
 
@@ -73,6 +112,8 @@ const documentoIdSchema = z.object({
 
 module.exports = {
   actualizarPerfilSchema,
+  buscarTecnicosSchema,
+  perfilPublicoSchema,
   tipoDocumentoSchema,
   documentoIdSchema,
   OFICIOS,
@@ -80,4 +121,6 @@ module.exports = {
   DIAS,
   TIPOS_DOCUMENTO,
   DOCUMENTOS_OBLIGATORIOS,
+  ESPECIALIDADES_MAX,
+  ESPECIALIDAD_LARGO_MAX,
 };

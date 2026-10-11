@@ -66,6 +66,8 @@ model Tecnico {
   aniosExperiencia    Int?
   distritos           Distrito[]
   disponibilidad      Json?
+  especialidades      String[]                @default([])
+  disponible          Boolean                 @default(false)
   documentos          DocumentoVerificacion[]
   historial           HistorialVerificacion[]
   createdAt           DateTime               @default(now())

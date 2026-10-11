@@ -15,6 +15,8 @@ const PERFIL_SELECT = {
   aniosExperiencia: true,
   distritos: true,
   disponibilidad: true,
+  especialidades: true,
+  disponible: true,
   estadoVerificacion: true,
   documentosEnviadosAt: true,
   usuario: { select: { id: true, email: true, nombre: true } },
@@ -222,6 +224,92 @@ async function enviarARevision(usuarioId) {
   });
 }
 
+const LIMITE_POR_DEFECTO = 20;
+const LIMITE_MAXIMO = 50;
+
+const DATOS_PUBLICOS_SELECT = {
+  id: true,
+  oficio: true,
+  aniosExperiencia: true,
+  especialidades: true,
+  distritos: true,
+  disponible: true,
+  usuario: { select: { nombre: true } },
+};
+
+function tecnicoResumen(tecnico) {
+  return {
+    id: tecnico.id,
+    nombre: tecnico.usuario.nombre,
+    oficio: tecnico.oficio,
+    aniosExperiencia: tecnico.aniosExperiencia,
+    especialidades: tecnico.especialidades,
+    distritos: tecnico.distritos,
+    disponible: tecnico.disponible,
+    verificado: true,
+    calificacionPromedio: null,
+    totalResenas: 0,
+    serviciosCompletados: 0,
+  };
+}
+
+function tecnicoPerfilPublico(tecnico) {
+  return {
+    ...tecnicoResumen(tecnico),
+    descripcion: tecnico.descripcion,
+    disponibilidad: tecnico.disponibilidad,
+  };
+}
+
+async function buscarTecnicos({ oficio, distrito, nombre, page = 1, limit } = {}) {
+  const limiteFinal = Math.min(limit ?? LIMITE_POR_DEFECTO, LIMITE_MAXIMO);
+
+  const where = {
+    estadoVerificacion: "verificado",
+    ...(oficio ? { oficio } : { oficio: { not: null } }),
+    ...(distrito ? { distritos: { has: distrito } } : {}),
+    ...(nombre ? { usuario: { nombre: { contains: nombre, mode: "insensitive" } } } : {}),
+  };
+
+  const [total, tecnicos] = await prisma.$transaction([
+    prisma.tecnico.count({ where }),
+    prisma.tecnico.findMany({
+      where,
+      orderBy: [
+        { disponible: "desc" },
+        { aniosExperiencia: { sort: "desc", nulls: "last" } },
+        { id: "asc" },
+      ],
+      skip: (page - 1) * limiteFinal,
+      take: limiteFinal,
+      select: DATOS_PUBLICOS_SELECT,
+    }),
+  ]);
+
+  return {
+    tecnicos: tecnicos.map(tecnicoResumen),
+    paginacion: {
+      page,
+      limit: limiteFinal,
+      total,
+      total_paginas: Math.ceil(total / limiteFinal),
+    },
+  };
+}
+
+async function obtenerPerfilPublico(id) {
+  const tecnico = await prisma.tecnico.findFirst({
+    where: { id, estadoVerificacion: "verificado", oficio: { not: null } },
+    select: { ...DATOS_PUBLICOS_SELECT, descripcion: true, disponibilidad: true },
+  });
+
+  if (!tecnico) {
+    throw new ApiError(404, "Técnico no encontrado");
+  }
+
+  return tecnicoPerfilPublico(tecnico);
+}
+
 module.exports = {
   obtenerPerfil,
   actualizarPerfil,
@@ -229,4 +317,6 @@ module.exports = {
   subirDocumento,
   eliminarDocumento,
   enviarARevision,
+  buscarTecnicos,
+  obtenerPerfilPublico,
 };

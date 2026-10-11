@@ -58,6 +58,16 @@
 - **Historial de cambios de estado:** cada acción del admin (aprobar, observar, rechazar, suspender, reactivar) se registra en `HistorialVerificacion` con: técnico, admin (quién lo hizo), estado anterior, estado nuevo, comentario/motivo y fecha. Los envíos del técnico no van aquí (su fecha queda en `Tecnico.documentosEnviadosAt`), porque el historial exige un admin.
 - **Admin por seed:** el rol `admin` se crea con `npm run seed:admin` (lee `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NOMBRE`; por defecto `admin@trabajoya.com` / `123456`). **Cambiar la contraseña por defecto** en cualquier entorno real.
 
+### Búsqueda y perfil público del técnico (T7)
+- **Solo clientes autenticados:** `GET /tecnicos` (búsqueda) y `GET /tecnicos/:id` (perfil público) exigen rol `cliente`. Un técnico no puede usar la búsqueda.
+- **Qué técnicos se muestran:** únicamente los `verificado` **y** con perfil completo (`oficio` definido). Quedan fuera `pendiente`, `en_revision`, `observado`, `rechazado` y `suspendido`, así como los verificados sin oficio.
+- **Filtros:** `oficio` (uno), `distrito` (coincide si está en la lista de cobertura del técnico) y `nombre` (texto libre, case-insensitive). Todos opcionales y combinables.
+- **Datos públicos:** nombre, oficio, `descripcion`, años de experiencia, especialidades, distritos, disponibilidad (estado actual `disponible` + horario semanal), distintivo `verificado` y, cuando existan (T8/T10), calificación promedio, número de reseñas y servicios completados. **Nunca** se exponen correo, teléfono, dirección, DNI, selfie, documentos ni historial de verificación.
+- **Especialidades:** campo nuevo del técnico (`Tecnico.especialidades`, máximo 5, cada una ≤ 40 caracteres, sin duplicados, normalizadas con `trim`). No reemplazan al oficio (sigue siendo uno solo) ni se usan como filtro todavía. El catálogo de sugerencias por oficio se expone en `GET /oficios/:id/especialidades`; el técnico puede escribir las suyas.
+- **Disponibilidad actual vs. horario:** `disponible` (booleano, interruptor manual del técnico) indica si está disponible ahora; es independiente del horario semanal (`disponibilidad`). Ambos se editan en `PUT /tecnicos/perfil` (T4 ampliado).
+- **Orden por defecto:** `disponible` desc → `aniosExperiencia` desc → `id` asc. Cuando existan reseñas (T10) y servicios (T8), la calificación y los servicios completados se antepondrán al desempate por experiencia. Sin parámetro de orden configurable.
+- **Paginación:** `page` (default 1) y `limit` (default 20, tope 50). El tope se recorta, no da error. La respuesta incluye `page`, `limit`, `total` y `total_paginas`; una página fuera de rango devuelve lista vacía.
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -103,5 +113,10 @@
 - **Módulo `src/modules/admin/`:** rutas bajo `/admin`, todas protegidas con `autenticar` + `autorizar("admin")`.
 - **Errores:** `409` cuando la acción no procede desde el estado actual del técnico; `404` técnico/documento inexistente; `400` validación (p. ej. motivo faltante).
 - **Seed del admin:** `prisma/seed-admin.js` (script `npm run seed:admin`) hace `upsert` por email con `rol: admin` y `bcrypt`.
+
+### Módulo de oficios y búsqueda (T7)
+- **Módulo `src/modules/oficios/`:** catálogo `ESPECIALIDADES_POR_OFICIO` (5 sugerencias por oficio) y endpoint `GET /oficios/:id/especialidades` protegido solo con `autenticar` (lo usa cualquier rol). `:id` debe ser un `Oficio` válido; si no, `400`.
+- **Auth por ruta en `tecnicos`:** se quitó el `router.use(autenticar, autorizar("tecnico"))` global y cada ruta declara su propio rol (`soloTecnico` / `soloCliente`), porque el módulo ahora sirve a dos roles. `GET /tecnicos/:id` va al final de la definición para no interceptar `/perfil` ni `/documentos`.
+- **Migración `20261011060902_perfil_publico`:** aditiva; agrega `Tecnico.especialidades TEXT[] DEFAULT '{}'` y `Tecnico.disponible BOOLEAN DEFAULT false`.
 
 

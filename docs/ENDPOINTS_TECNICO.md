@@ -31,7 +31,7 @@ Estado: listo
 Devuelve el perfil del técnico autenticado (aún puede estar sin completar: campos en `null`).
 Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
 Respuesta 200:
-{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "estadoVerificacion": "pendiente", "documentosEnviadosAt": null, "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
+{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos"], "disponible": true, "estadoVerificacion": "pendiente", "documentosEnviadosAt": null, "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
 Errores: 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
 Estado: listo
 
@@ -47,16 +47,20 @@ Body:
   "disponibilidad": [
     { "dia": "lunes", "desde": "08:00", "hasta": "18:00" },
     { "dia": "martes", "desde": "08:00", "hasta": "18:00" }
-  ]
+  ],
+  "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos"],
+  "disponible": true
 }
 Respuesta 200:
-{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" }, { "dia": "martes", "desde": "08:00", "hasta": "18:00" } ], "estadoVerificacion": "pendiente", "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
+{ "data": { "perfil": { "id": 2, "oficio": "electricidad", "descripcion": "Electricista con 8 años de experiencia.", "aniosExperiencia": 8, "distritos": ["trujillo", "la_esperanza"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" }, { "dia": "martes", "desde": "08:00", "hasta": "18:00" } ], "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos"], "disponible": true, "estadoVerificacion": "pendiente", "usuario": { "id": 2, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
 Errores: 400 datos inválidos · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
 Valores válidos (los valida el backend):
 - `oficio`: gasfiteria | electricidad | carpinteria | albanileria | pintura
 - `distritos`: trujillo | el_porvenir | florencia_de_mora | huanchaco | la_esperanza | laredo | moche | poroto | salaverry | simbal | victor_larco_herrera
 - `dia`: lunes | martes | miercoles | jueves | viernes | sabado | domingo · horas en formato `HH:MM`
 - `descripcion` es opcional · al menos un distrito y un día de disponibilidad · sin días repetidos
+- `especialidades` (opcional): máximo 5, cada una de hasta 40 caracteres, sin duplicados (se recortan los espacios de los extremos)
+- `disponible` (opcional): verdadero o falso; indica si está disponible ahora (independiente del horario semanal)
 Estado: listo
 
 ### GET /tecnicos/documentos
@@ -91,4 +95,13 @@ Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
 Respuesta 200:
 { "data": { "estadoVerificacion": "en_revision", "documentosEnviadosAt": "2026-10-11T05:11:05.766Z" } }
 Errores: 400 faltan documentos obligatorios (`detalles.faltantes`) / ya está en revisión / ya está aprobada / cuenta suspendida / verificación rechazada (definitivo) · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### GET /oficios/:id/especialidades
+Catálogo de especialidades sugeridas para un oficio. El técnico puede elegir de aquí o escribir las suyas (se guardan en `PUT /tecnicos/perfil`). Cualquier rol autenticado.
+Auth: sí — `Authorization: Bearer <token>`
+Ejemplo: `GET /oficios/electricidad/especialidades`
+Respuesta 200:
+{ "data": { "oficio": "electricidad", "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos", "Cortocircuitos", "Puntos de luz", "Tomacorrientes"] } }
+Errores: 400 oficio inválido · 401 no autenticado
 Estado: listo

@@ -34,6 +34,16 @@ async function enviarARevision(req, res) {
   res.status(200).json({ data: resultado });
 }
 
+async function buscarTecnicos(req, res) {
+  const resultado = await tecnicosService.buscarTecnicos(req.validated.query);
+  res.status(200).json({ data: resultado });
+}
+
+async function obtenerPerfilPublico(req, res) {
+  const tecnico = await tecnicosService.obtenerPerfilPublico(req.validated.params.id);
+  res.status(200).json({ data: { tecnico } });
+}
+
 module.exports = {
   obtenerPerfil,
   actualizarPerfil,
@@ -41,4 +51,6 @@ module.exports = {
   subirDocumento,
   eliminarDocumento,
   enviarARevision,
+  buscarTecnicos,
+  obtenerPerfilPublico,
 };

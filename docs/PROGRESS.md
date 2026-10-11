@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T7 — Cliente: búsqueda, filtros y perfil público del técnico.**
+- **T8 — Solicitud de servicio y estados del servicio.**
 
-> **Tarea siguiente:** T8 — Solicitud de servicio y estados del servicio.
+> **Tarea siguiente:** T9 — Chat en tiempo real (Socket.IO).
 
 ## Pendientes (en orden)
-- [ ] T8 — Solicitud de servicio y estados del servicio
 - [ ] T9 — Chat en tiempo real (Socket.IO)
 - [ ] T10 — Reseñas (solo tras servicio completado) e historial
 - [ ] T11 — Reportes de incidencias
@@ -27,6 +26,7 @@
 - [x] **T4 — Perfil del técnico:** enums `Oficio` y `Distrito`, campos de perfil en `Tecnico`, módulo `src/modules/tecnicos` y endpoints `GET`/`PUT /tecnicos/perfil`. *(2026-10-11)*
 - [x] **T5 — Subida de documentos de verificación (Cloudinary):** enums `TipoDocumentoVerificacion`/`EstadoDocumento`, modelo `DocumentoVerificacion`, estados de revisión, Multer (memoria, 5 MB) y endpoints `GET`/`POST`/`DELETE /tecnicos/documentos` y `POST /tecnicos/verificacion/enviar`. *(2026-10-11)*
 - [x] **T6 — Admin: revisar, aprobar, observar o rechazar técnicos:** enum `verificado` (ex `aprobado`) y `suspendido`, modelo `HistorialVerificacion`, módulo `src/modules/admin` con listado/detalle, marcado de documentos, aprobar/observar/rechazar y suspender/reactivar, y seed de admin. *(2026-10-11)*
+- [x] **T7 — Cliente: búsqueda, filtros y perfil público del técnico:** campos `especialidades` y `disponible` en `Tecnico`, módulo `src/modules/oficios` (catálogo de especialidades) y endpoints `GET /tecnicos` (búsqueda con filtros y paginación), `GET /tecnicos/:id` (perfil público) y `GET /oficios/:id/especialidades`. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -76,7 +76,19 @@
 - **Cambio en T5:** `POST /tecnicos/verificacion/enviar` ahora solo se permite desde `pendiente`/`observado`; desde `verificado`/`suspendido`/`rechazado` responde `400` (rechazado es definitivo).
 - **Seed de admin:** `prisma/seed-admin.js` + script `npm run seed:admin` (upsert por email con `rol: admin`; `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NOMBRE`, por defecto `admin@trabajoya.com` / `123456`).
 
-## Verificaciones realizadas (T1, T2, T4, T5 y T6)
+### T7
+- **Modelo:** `Tecnico` suma `especialidades String[]` (default `[]`) y `disponible Boolean` (default `false`). Migración `20261011060902_perfil_publico` (aditiva).
+- **Visibilidad:** la búsqueda y el perfil público solo muestran técnicos `estadoVerificacion = "verificado"` **y** con `oficio` definido (perfil completo). Nunca `pendiente`/`en_revision`/`observado`/`rechazado`/`suspendido`. Acceso solo con rol `cliente` (`GET /tecnicos` y `GET /tecnicos/:id`).
+- **Datos públicos:** `id`, `nombre`, `oficio`, `aniosExperiencia`, `especialidades`, `distritos`, `disponible` y `verificado: true`; el detalle agrega `descripcion` y `disponibilidad` (horario semanal). Reservados para tareas futuras (siempre `null`/`0` por ahora): `calificacionPromedio` (T10), `totalResenas` (0) y `serviciosCompletados` (0). **Nunca** se exponen correo, teléfono, dirección, DNI, selfie, documentos ni historial de verificación.
+- **Orden (default):** `disponible` desc → `aniosExperiencia` desc (nulls al final) → `id` asc. Sin parámetro de orden. Con T10 se antepondrá la calificación y los servicios completados al desempate.
+- **Paginación:** `page` (default 1) y `limit` (default 20, tope 50; si piden más se recorta a 50). La respuesta incluye `paginacion { page, limit, total, total_paginas }`. Una página fuera de rango devuelve la lista vacía (no error).
+- **Filtros:** `oficio` (enum), `distrito` (enum, coincide si está en la lista del técnico) y `nombre` (texto libre, `contains` case-insensitive sobre el nombre del usuario).
+- **Especialidades:** campo nuevo, hasta 5 por técnico, cada una máx. 40 caracteres, sin duplicados; se normalizan con `trim`. Editables en `PUT /tecnicos/perfil` (junto a `disponible`). Catálogo sugerido por oficio en `GET /oficios/:id/especialidades` (el técnico puede escribir las suyas). No reemplazan al oficio ni se usan como filtro todavía.
+- **Módulo `oficios`:** `src/modules/oficios/` con el catálogo `ESPECIALIDADES_POR_OFICIO` (5 sugerencias por oficio); endpoint `GET /oficios/:id/especialidades` con `autenticar` (cualquier rol); `:id` fuera del enum → 400.
+- **Rutas:** `tecnicos.routes.js` reestructurado a auth por ruta (se quitó el `router.use` global) y `GET /:id` al final para no chocar con `/perfil` y `/documentos`.
+- **Reservado T10/T8:** `calificacionPromedio`, `totalResenas` y `serviciosCompletados` se calcularán al implementar reseñas (T10) y servicios (T8); hoy son constantes.
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6 y T7)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -86,6 +98,9 @@
 - Migración `20261011060000_admin_verificacion` aplicada (`RENAME VALUE`/`ADD VALUE` + `HistorialVerificacion`).
 - **T6** — con admin sembrado (`npm run seed:admin`) y técnicos reales: `GET /admin/tecnicos?estado=en_revision` → 200 (encuentra al técnico); `GET /admin/tecnicos/:id` → 200 con documentos (URL firmada presente) e historial; `PATCH .../documentos/:documentoId` marcar `observado` → 200; `POST .../observar` → 200 `observado` (el técnico puede re-subir el documento observado y reenviar → 200 `en_revision`); `POST .../aprobar` → 200 `verificado` y todos los documentos `aprobado`, historial registrado; aprobar de nuevo → 409; `POST .../suspender` sin motivo → 400, con motivo → 200 `suspendido`; `POST .../reactivar` → 200 `verificado`, reactivar de nuevo → 409; `POST .../rechazar` → 200 `rechazado`; reenviar tras rechazo → 400; suspender un rechazado → 409; detalle inexistente → 404; `?estado=nope` → 400; como técnico → 403; sin token → 401.
 - Datos de prueba creados durante las pruebas fueron eliminados (queda solo el admin sembrado; 0 técnicos, 0 documentos, 0 historial) y los archivos de prueba borrados de Cloudinary.
+- Migración `20261011060902_perfil_publico` aplicada.
+- **T7** — con 3 técnicos verificados (marcados `verificado` en BD como setup), 1 pendiente y 1 verificado sin oficio: `GET /tecnicos` → 200 solo con los 3 verificados y `oficio` definido, orden `disponible` desc → experiencia desc (10, 8, 5); filtros `oficio=electricidad`, `distrito=trujillo` y `nombre=...` → 200 correctos; paginación `limit=2` (página 1 → 2, página 2 → 1, página fuera de rango → `[]`) con `total`/`total_paginas`; `limit=100` → recortado a 50; `GET /tecnicos/:id` → 200 con las claves públicas exactas y sin datos de contacto, `calificacionPromedio:null`; perfil de no verificado, sin oficio e inexistente → 404; `PUT /tecnicos/perfil` con 6 especialidades, especialidad > 40, duplicada y `disponible` no booleano → 400; especialidades válidas se guardan con `trim` y se reflejan en `GET`; `GET /oficios/electricidad/especialidades` y `gasfiteria` → 200, oficio inválido → 400, sin token → 401; `GET /tecnicos` como técnico → 403, sin token → 401.
+- Datos de prueba de T7 eliminados (queda solo el admin; 0 técnicos).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*
