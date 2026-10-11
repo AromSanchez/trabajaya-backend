@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T3 — Login con Google OAuth.** *(BLOQUEADA: faltan `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`; pedirlos al humano.)*
+- **T4 — Perfil del técnico (oficio, experiencia, zona, disponibilidad):** modelo/datos del perfil y endpoints para que el técnico lo complete y lo consulte.
 
-> **Tarea siguiente:** T4 — Perfil del técnico (oficio, experiencia, zona, disponibilidad).
+> **Tarea siguiente:** T5 — Subida de documentos de verificación (Cloudinary).
 
 ## Pendientes (en orden)
-- [ ] T4 — Perfil del técnico (oficio, experiencia, zona, disponibilidad)
 - [ ] T5 — Subida de documentos de verificación (Cloudinary)
 - [ ] T6 — Admin: revisar, aprobar, observar o rechazar técnicos
 - [ ] T7 — Cliente: búsqueda, filtros y perfil público del técnico
@@ -20,6 +19,9 @@
 - [ ] T11 — Reportes de incidencias
 - [ ] T12 — Favoritos y notificaciones
 - [ ] T13 — Datos de prueba
+
+## Postergadas (fuera del MVP por ahora)
+- [ ] T3 — Login con Google OAuth *(se hará más adelante; no es parte del MVP)*
 
 ## Hechas
 - [x] **T0 — Configuración inicial:** proyecto Express, Prisma 7, conexión a PostgreSQL, estructura de carpetas, `.env.example`, `.gitignore`. *(2026-10-10)*
@@ -58,6 +60,6 @@
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*
 - [x] Secreto JWT *(`JWT_SECRET` en `.env`)*
-- [ ] Google OAuth: Client ID y Client Secret *(T3: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)*
+- [ ] Google OAuth: Client ID y Client Secret — **postergado, fuera del MVP** *(se pedirán cuando se haga T3)*
 - [ ] Cloudinary: cloud name, API key y API secret *(T5: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)*
 - [ ] Reglas de negocio: estados del servicio, verificación y comisión

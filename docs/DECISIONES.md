@@ -20,6 +20,9 @@
 - **Estados de verificación:** `pendiente`, `aprobado`, `observado`, `rechazado`.
 - **La verificación y la comisión se calculan solo en el backend**, nunca confiando en lo que envía la app.
 
+### Alcance del MVP
+- **Google OAuth se posterga y queda fuera del MVP.** De momento el único login es con email y contraseña (JWT). El login con Google (T3) se implementará más adelante. En consecuencia, no se piden aún `GOOGLE_CLIENT_ID` ni `GOOGLE_CLIENT_SECRET`.
+
 ## Técnicas
 
 ### ORM y base de datos
