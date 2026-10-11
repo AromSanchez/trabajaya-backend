@@ -19,6 +19,28 @@ enum EstadoVerificacion {
   rechazado
 }
 
+enum Oficio {
+  gasfiteria
+  electricidad
+  carpinteria
+  albanileria
+  pintura
+}
+
+enum Distrito {
+  trujillo
+  el_porvenir
+  florencia_de_mora
+  huanchaco
+  la_esperanza
+  laredo
+  moche
+  poroto
+  salaverry
+  simbal
+  victor_larco_herrera
+}
+
 model Usuario {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -35,6 +57,11 @@ model Tecnico {
   usuarioId          Int                @unique
   usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   estadoVerificacion EstadoVerificacion @default(pendiente)
+  oficio             Oficio?
+  descripcion        String?
+  aniosExperiencia   Int?
+  distritos          Distrito[]
+  disponibilidad     Json?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 }

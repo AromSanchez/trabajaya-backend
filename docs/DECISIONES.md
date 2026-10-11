@@ -20,6 +20,15 @@
 - **Estados de verificación:** `pendiente`, `aprobado`, `observado`, `rechazado`.
 - **La verificación y la comisión se calculan solo en el backend**, nunca confiando en lo que envía la app.
 
+### Perfil del técnico (T4)
+- **Un solo oficio por técnico:** enum `Oficio = { gasfiteria, electricidad, carpinteria, albanileria, pintura }`. El técnico elige exactamente uno.
+- **Zona de cobertura = distritos de la provincia de Trujillo:** catálogo fijo (enum `Distrito`) con los 11 distritos: `trujillo`, `el_porvenir`, `florencia_de_mora`, `huanchaco`, `la_esperanza`, `laredo`, `moche`, `poroto`, `salaverry`, `simbal`, `victor_larco_herrera`. El técnico elige uno o varios.
+  - Los valores internos son identificadores ASCII (sin tildes ni espacios): `albanileria` (no "albañilería") y `victor_larco_herrera` (no "Víctor Larco Herrera"). La app se encarga de mostrarlos con su forma legible.
+- **Experiencia:** `aniosExperiencia` (entero ≥ 0) + `descripcion` (texto libre, opcional).
+- **Disponibilidad estructurada:** lista de rangos por día de la semana (`dia`, `desde`, `hasta`), con horas en formato `HH:MM` y sin repetir el mismo día. Se guarda como `Json` en la columna `disponibilidad`.
+- **Sin tarifa en el perfil:** el precio se define en la solicitud de servicio (T8), no en el perfil.
+- **El perfil es privado del propio técnico en T4:** `GET` y `PUT /tecnicos/perfil` están protegidos con `autenticar` + `autorizar("tecnico")` y operan sobre el perfil del dueño del token. El perfil público del técnico es T7.
+
 ### Alcance del MVP
 - **Google OAuth se posterga y queda fuera del MVP.** De momento el único login es con email y contraseña (JWT). El login con Google (T3) se implementará más adelante. En consecuencia, no se piden aún `GOOGLE_CLIENT_ID` ni `GOOGLE_CLIENT_SECRET`.
 
@@ -31,6 +40,7 @@
 - **Cliente de runtime con driver adapter:** `new PrismaClient({ adapter: new PrismaPg(...) })` usando `@prisma/adapter-pg`. Singleton en `src/config/prisma.js`.
 - **Generator `prisma-client-js`** (genera en `node_modules/@prisma/client`): el proyecto es CommonJS y el generator nuevo `prisma-client` emite ESM/TS, que no encaja aquí.
 - **Todo cambio de esquema va en una migración de Prisma** (`prisma migrate dev`). Pide confirmación antes de borrar tablas o datos.
+- **Verificar el cliente tras cambiar el schema:** en este entorno `prisma migrate dev` a veces no refresca el cliente generado; si un campo o modelo nuevo "no existe" en runtime (`Unknown field`), ejecutar `npx prisma generate` y reiniciar el servidor.
 - **Reset de `mi_basedatos`:** el schema `public` traía escombro de un starter de Prisma (`Task` vacía + historial `20260714141918_init`). Con consentimiento explícito del usuario se ejecutó `prisma migrate reset` (Task tenía 0 filas) y se aplicó la migración propia `20261011025046_init`.
 
 ### Autenticación
