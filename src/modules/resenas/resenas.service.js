@@ -1,6 +1,7 @@
 const prisma = require("../../config/prisma");
 const ApiError = require("../../config/ApiError");
 const { serializar, SERVICIO_SELECT } = require("../servicios/servicios.service");
+const { crearYemitir } = require("../notificaciones/notificaciones.service");
 
 const LIMITE_POR_DEFECTO = 20;
 const LIMITE_MAXIMO = 50;
@@ -72,7 +73,13 @@ async function recalcularReputacion(tx, tecnicoId) {
 async function crearResena(usuario, servicioId, { calificacion, comentario }) {
   const servicio = await prisma.servicio.findUnique({
     where: { id: servicioId },
-    select: { id: true, clienteId: true, tecnicoId: true, estado: true },
+    select: {
+      id: true,
+      clienteId: true,
+      tecnicoId: true,
+      estado: true,
+      tecnico: { select: { usuarioId: true } },
+    },
   });
 
   if (!servicio || servicio.clienteId !== usuario.id) {
@@ -90,8 +97,8 @@ async function crearResena(usuario, servicioId, { calificacion, comentario }) {
     throw new ApiError(409, "Ya calificaste este servicio");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const resena = await tx.resena.create({
+  const resena = await prisma.$transaction(async (tx) => {
+    const creada = await tx.resena.create({
       data: {
         servicioId,
         clienteId: usuario.id,
@@ -102,8 +109,18 @@ async function crearResena(usuario, servicioId, { calificacion, comentario }) {
       select: RESENA_SELECT,
     });
     await recalcularReputacion(tx, servicio.tecnicoId);
-    return resena;
+    return creada;
   });
+
+  await crearYemitir({
+    usuarioId: servicio.tecnico.usuarioId,
+    tipo: "resena_recibida",
+    titulo: "Nueva reseña recibida",
+    mensaje: `Recibiste una calificación de ${calificacion} estrellas`,
+    datos: { servicio_id: servicio.id, resena_id: resena.id, calificacion },
+  });
+
+  return resena;
 }
 
 async function listarResenasPublicas(tecnicoId, { page = 1, limit } = {}) {

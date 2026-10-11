@@ -10,6 +10,8 @@ const serviciosRoutes = require("./modules/servicios/servicios.routes");
 const chatRoutes = require("./modules/chat/chat.routes");
 const resenasRoutes = require("./modules/resenas/resenas.routes");
 const reportesRoutes = require("./modules/reportes/reportes.routes");
+const favoritosRoutes = require("./modules/favoritos/favoritos.routes");
+const notificacionesRoutes = require("./modules/notificaciones/notificaciones.routes");
 const { inicializarSocket } = require("./config/socket");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
@@ -33,6 +35,8 @@ app.use("/admin", reportesRoutes.admin);
 app.use("/tecnicos", resenasRoutes.publicas);
 app.use("/cliente", resenasRoutes.cliente);
 app.use("/tecnico", resenasRoutes.tecnico);
+app.use("/favoritos", favoritosRoutes);
+app.use("/notificaciones", notificacionesRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

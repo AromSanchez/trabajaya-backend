@@ -5,9 +5,9 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T12 — Favoritos y notificaciones.**
+- **T13 — Datos de prueba.**
 
-> **Tarea siguiente:** T13 — Datos de prueba.
+> **Tarea siguiente:** sin tareas obligatorias del MVP pendientes (T3 Google OAuth queda postergada).
 
 ## Pendientes (en orden)
 - [ ] T13 — Datos de prueba
@@ -27,6 +27,7 @@
 - [x] **T9 — Chat en tiempo real (Socket.IO) y acuerdo de precio/alcance:** modelos `Mensaje` y `Propuesta` y enum `EstadoPropuesta`, campos `montoAcordado`/`alcanceAcordado` en `Servicio`, módulo `src/modules/chat` (historial y envío REST), Socket.IO con autenticación JWT y salas por servicio, y endpoints de propuesta (`crear`/`aceptar`/`rechazar`). *(2026-10-11)*
 - [x] **T10 — Reseñas (solo tras servicio completado) e historial:** modelo `Resena` y campos de reputación en `Tecnico` (`calificacionPromedio`, `totalResenas`, `serviciosCompletados`), módulo `src/modules/resenas` (crear reseña, listado público e historial por rol), recalculo de reputación en transacción, orden de búsqueda por calificación y ocultación de reseñas por el admin. *(2026-10-11)*
 - [x] **T11 — Reportes de incidencias:** enums `TipoObjetivoReporte`/`CategoriaReporte`/`EstadoReporte` y modelo `Reporte`, módulo `src/modules/reportes` con creación ligada a un servicio (cliente→técnico, técnico→cliente, técnico→reseña), validación de categoría por objetivo, comentario obligatorio en `fraude`/`otro` y anti-duplicado, y endpoints admin para listar/filtrar, ver y resolver/descartar con nota. *(2026-10-11)*
+- [x] **T12 — Favoritos y notificaciones:** modelo `Favorito` (cliente ↔ técnico, idempotente) y `Notificacion` + enum `TipoNotificacion`, módulos `src/modules/favoritos` (solo cliente) y `src/modules/notificaciones` (in-app + Socket.IO), sala personal `usuario:<id>`, y emisión en vivo en servicios, chat, reseñas, verificación del admin y reportes. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -123,7 +124,17 @@
 - **Reglas:** todo reporte se liga a un servicio en estado `aceptado`/`completado`/`cancelado` (`409` si no); el cliente reporta al técnico de un servicio suyo, el técnico reporta al cliente de un servicio suyo o una reseña suya (un cliente **no** reporta reseñas); un no participante → `404`. Categoría válida según el objetivo (`400` si no corresponde); comentario ≤ 500, obligatorio en `fraude`/`otro`. Anti-duplicado por `(reportante, servicio, tipoObjetivo)` → `409`.
 - **Gestión del admin:** `GET /admin/reportes` con filtros `estado`, `tipo_objetivo`, `categoria` y paginación (`page` default 1, `limit` default 20 tope 50, más reciente primero). `PATCH /admin/reportes/:id` con `{ estado: "resuelto" | "descartado", nota }` (nota obligatoria) y solo desde `pendiente` (`409` si ya está cerrado). El reporte **no** sanciona solo; el admin sanciona con los endpoints existentes (suspender técnico, ocultar reseña).
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10 y T11)
+### T12
+- **Modelo:** modelo `Favorito` (`clienteId`, `tecnicoId`, `@@unique([clienteId, tecnicoId])`, cascadas); modelo `Notificacion` (`usuarioId`, `tipo TipoNotificacion`, `titulo`, `mensaje?`, `datos Json?` con referencias, `leida` default `false`, `leidaAt?`, `createdAt`) e índice `[usuarioId, leida]`/`[usuarioId, createdAt]`; enum `TipoNotificacion` con 16 valores. `Usuario` suma `favoritos`/`notificaciones`; `Tecnico` suma `favoritos`. Migración `20261011184212_favoritos_notificaciones` (aditiva).
+- **Módulo `src/modules/favoritos`:** solo rol `cliente`. `POST /favoritos/:tecnicoId` (idempotente, `200`), `DELETE /favoritos/:tecnicoId` (idempotente, `204`, nunca `404`), `GET /favoritos` (paginado). Solo se puede marcar técnicos `verificado` con `oficio` (`404` si no). El listado filtra además a los que siguen vigentes y agrega `favoritoDesde`.
+- **Módulo `src/modules/notificaciones`:** roles `cliente`/`tecnico`. `GET /notificaciones` (filtro `leida`, paginado, devuelve `noLeidas`), `GET /notificaciones/no-leidas`, `PATCH /notificaciones/:id/leer`, `PATCH /notificaciones/leer-todas`. Nacen no leídas; **no** se pueden borrar. Marcar una ajena → `404`; el admin no accede al módulo (`403`).
+- **Emisión en vivo:** `socket.js` une cada socket conectado a la sala personal `usuario:<id>`; `notificaciones.service.crearYemitir(...)` crea la fila y emite `notificacion:nueva` a esa sala. Reutiliza `salaUsuario(usuarioId)` (nuevo export de `socket.js`). Requiere `socket.js` de forma perezosa (dentro de `emitir`) para no crear dependencia circular con `chat.service`.
+- **Best-effort:** `crearYemitir` captura sus propios errores (loguea y devuelve `null`); el endpoint original nunca falla por una notificación. Se llama **después** de la transacción/estado principal, de modo que la notificación ya existe cuando responde la API.
+- **Puntos de integración:** `servicios.service` (crear→`solicitud_nueva`, aceptar→`solicitud_aceptada`, rechazar→`solicitud_rechazada`, completar→`servicio_completado`, cancelar→`servicio_cancelado`, propuesta nueva/aceptada/rechazada), `chat.service` (mensaje→`mensaje_nuevo`), `resenas.service` (→`resena_recibida`), `admin.service` (verificación→según estado nuevo) y `reportes.service` (resolver/descartar→`reporte_resuelto`/`reporte_descartado`). En cada caso se notifica **a la otra parte** (nunca al actor).
+- **Verificación:** mapa `estadoNuevo` → notificación (`verificado`→`verificacion_aprobada`, `observado`→`verificacion_observada`, `rechazado`→`verificacion_rechazada`, `suspendido`→`verificacion_suspendida`). **Reactivar** (`suspendido → verificado`) reutiliza `verificacion_aprobada`.
+- **Montaje:** `index.js` añade `/favoritos` y `/notificaciones`.
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10, T11 y T12)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -148,6 +159,9 @@
 - Migración `20261011182740_reportes` aplicada.
 - **T11** — con cliente, segundo cliente, dos técnicos verificados y los servicios/reseñas de prueba creados por BD (setup), y el admin sembrado: cliente reporta al técnico en `aceptado` → `201` (`estado: pendiente`, objetivo `tecnico`, reportante correcto); repetir el mismo → `409`; `fraude` sin comentario → `400`, con comentario → `201`; servicio `pendiente` → `409`; categoría `no_estaba` contra técnico → `400` y `no_se_presento` en `cancelado` → `201`; cliente intenta reportar reseña → `403`; técnico reporta al cliente → `201` (objetivo `cliente`); categoría de técnico contra cliente → `400`; técnico reporta su reseña → `201` (objetivo `resena`); reseña ajena → `404`; cliente no participante → `404`; categoría inexistente, `servicio_id`/`resena_id` faltantes y comentario > 500 → `400`; servicio inexistente → `404`; sin token → `401`, admin creando → `403`. Admin: listado con `reportante` y paginación correcta; filtros `estado=pendiente`, `tipo_objetivo=resena` y `categoria=fraude` → `200`; `limit=1` → `200`; `estado` inválido → `400`; detalle → `200`, inexistente → `404`; resolver sin nota → `400`, estado inválido → `400`, resolver → `200` (`estado: resuelto`, `notaResolucion`, `resueltoAt`, `resueltoPor`), resolver de nuevo → `409`, descartar otro → `200`, resolver inexistente → `404`; cliente en rutas admin → `403`, sin token → `401`. Resultado: **49/49 comprobaciones correctas**.
 - Datos de prueba de T11 eliminados (queda solo el admin; 0 técnicos/servicios/resenas/reportes).
+- Migración `20261011184212_favoritos_notificaciones` aplicada.
+- **T12** — con cliente, segundo cliente, tres técnicos (dos verificados con oficio por BD) y el admin sembrado: **favoritos** — marcar → `200` con `favorito: true`; marcar repetido → `200` sin duplicar (1 fila en BD); listar → `200` con datos públicos (`verificado: true`, `oficio`); técnico en la ruta → `403`; quitar → `204`, repetido → `204`; restantes → `1`; técnico no verificado → `404`. **Notificaciones** — crear servicio → técnico recibe `solicitud_nueva`; aceptar → `solicitud_aceptada`; propuesta → `propuesta_nueva`; aceptar propuesta → `propuesta_aceptada`; mensaje de chat → `mensaje_nuevo`; completar → `servicio_completado`; reseña → `resena_recibida`; cancelar → `servicio_cancelado`; resolver reporte → `reporte_resuelto`; aprobar técnico → `verificacion_aprobada`; suspender → `verificacion_suspendida`. **Lectura/contador** — `noLeidas > 0`; marcar una → `200` y `leida: true`, el contador baja 1; `GET /notificaciones/no-leidas` → número; `PATCH /notificaciones/leer-todas` → `noLeidas: 0`; filtros `leida=true`/`false` correctos. **Acceso** — otro usuario marca ajena → `404`; admin en `/notificaciones` → `403`. **Socket.IO real** — un cliente emite y el técnico conectado (sala `usuario:<id>`) recibe `notificacion:nueva` con `tipo: solicitud_nueva` en vivo. Resultado: **42/42 comprobaciones correctas**.
+- Datos de prueba de T12 eliminados (queda solo el admin; 0 técnicos/servicios/favoritos/notificaciones).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*

@@ -213,10 +213,11 @@ Errores: 400 id inválido / mensaje vacío o mayor a 1000 caracteres · 401 no a
 Estado: listo
 
 ## Chat en tiempo real (Socket.IO)
-Conexión con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Eventos:
+Conexión con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Al conectar, el socket entra automáticamente a su **sala personal** `usuario:<id>` para recibir notificaciones. Eventos:
 - Emitir `servicio:unirse` `{ "servicio_id": 1 }` → callback `{ "ok": true, "servicio_id": 1 }` o `{ "error": "..." }`. Une al socket a la sala del servicio (solo si es participante).
 - Emitir `mensaje:enviar` `{ "servicio_id": 1, "contenido": "..." }` → callback `{ "ok": true, "mensaje": { ... } }` o `{ "error": "..." }`.
 - Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }` (llega a todos los conectados a la sala).
+- Escuchar `notificacion:nueva` `{ "notificacion": { ... } }` (llega a la sala personal `usuario:<id>`; mismos campos que `GET /notificaciones`).
 - Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }` cuando una operación falla.
 Estado: listo
 
@@ -264,3 +265,106 @@ Respuesta 201:
 Errores: 400 tipo de objetivo/categoría inválidos, falta el servicio, categoría que no corresponde al objetivo o comentario faltante/largo · 401 no autenticado · 403 no eres cliente ni técnico · 404 la solicitud no existe o no participaste en ella · 409 el servicio no está en un estado reportable o ya reportaste este objetivo en este servicio
 Notas: el reporte queda `pendiente` para que lo revise el admin; no genera sanciones automáticas. Un cliente **no** reporta reseñas (eso lo hace el técnico).
 Estado: listo
+
+### POST /favoritos/:tecnicoId
+El cliente marca a un técnico como favorito. Solo se pueden marcar técnicos visibles en la búsqueda (verificados y con oficio). Es **idempotente**: marcar de nuevo no duplica ni da error.
+Auth: sí — rol `cliente`
+Ejemplo: `POST /favoritos/10`
+Respuesta 200:
+{ "data": { "favorito": { "tecnicoId": 10, "favorito": true, "createdAt": "2026-10-11T10:00:00.000Z" } } }
+Errores: 400 id inválido · 401 no autenticado · 403 no eres cliente · 404 el técnico no existe, no está verificado o no tiene oficio
+Estado: listo
+
+### DELETE /favoritos/:tecnicoId
+Quita a un técnico de favoritos. Es **idempotente**: si no estaba marcado, también responde `204`.
+Auth: sí — rol `cliente`
+Ejemplo: `DELETE /favoritos/10`
+Respuesta 204: (sin cuerpo)
+Errores: 400 id inválido · 401 no autenticado · 403 no eres cliente
+Estado: listo
+
+### GET /favoritos
+Lista los técnicos favoritos del cliente (solo los que siguen visibles en la búsqueda). Ordenados por fecha en que se marcaron (más reciente primero).
+Auth: sí — rol `cliente`
+Query (opcional): `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{
+  "data": {
+    "favoritos": [
+      {
+        "id": 10,
+        "nombre": "Luis Ramos",
+        "oficio": "electricidad",
+        "aniosExperiencia": 10,
+        "especialidades": ["Instalaciones eléctricas"],
+        "distritos": ["trujillo"],
+        "disponible": true,
+        "verificado": true,
+        "calificacionPromedio": 5,
+        "totalResenas": 1,
+        "serviciosCompletados": 1,
+        "favoritoDesde": "2026-10-11T10:00:00.000Z"
+      }
+    ],
+    "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 }
+  }
+}
+Notas: cada ítem trae los mismos datos públicos que `GET /tecnicos` más `favoritoDesde`. Una página fuera de rango devuelve `favoritos: []`.
+Errores: 400 paginación inválida · 401 no autenticado · 403 no eres cliente
+Estado: listo
+
+### GET /notificaciones
+Lista las notificaciones del usuario autenticado (más recientes primero). Incluye el contador de no leídas.
+Auth: sí — rol `cliente` o `tecnico`
+Query (opcional): `leida` = `true` | `false` · `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{
+  "data": {
+    "notificaciones": [
+      {
+        "id": 1,
+        "tipo": "solicitud_aceptada",
+        "titulo": "Solicitud aceptada",
+        "mensaje": "Luis Ramos aceptó tu solicitud",
+        "datos": { "servicio_id": 1 },
+        "leida": false,
+        "leidaAt": null,
+        "createdAt": "2026-10-11T10:00:00.000Z"
+      }
+    ],
+    "noLeidas": 1,
+    "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 }
+  }
+}
+Notas: las notificaciones nacen **no leídas** y **no se pueden borrar**. El campo `tipo` identifica el evento (ver la lista de tipos al final de la sección). El socket conectado recibe en vivo `notificacion:nueva` (ver sección de Socket.IO).
+Errores: 400 filtro o paginación inválidos · 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+### GET /notificaciones/no-leidas
+Devuelve solo el contador de notificaciones no leídas (para el badge).
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "noLeidas": 3 } }
+Errores: 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+### PATCH /notificaciones/:id/leer
+Marca **una** notificación como leída. Idempotente (si ya estaba leída, devuelve la misma).
+Auth: sí — rol `cliente` o `tecnico`
+Ejemplo: `PATCH /notificaciones/1/leer`
+Respuesta 200:
+{ "data": { "notificacion": { "id": 1, "tipo": "solicitud_aceptada", "leida": true, "leidaAt": "2026-10-11T10:05:00.000Z", "createdAt": "2026-10-11T10:00:00.000Z" } } }
+Errores: 400 id inválido · 401 no autenticado · 403 si no es `cliente` ni `tecnico` · 404 la notificación no existe o no es tuya
+Estado: listo
+
+### PATCH /notificaciones/leer-todas
+Marca **todas** las notificaciones no leídas del usuario como leídas.
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "actualizadas": 3 } }
+Errores: 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+#### Tipos de notificación (`tipo`)
+`solicitud_nueva`, `solicitud_aceptada`, `solicitud_rechazada`, `servicio_completado`, `servicio_cancelado`, `mensaje_nuevo`, `resena_recibida`, `propuesta_nueva`, `propuesta_aceptada`, `propuesta_rechazada`, `verificacion_aprobada`, `verificacion_observada`, `verificacion_rechazada`, `verificacion_suspendida`, `reporte_resuelto`, `reporte_descartado`.
+

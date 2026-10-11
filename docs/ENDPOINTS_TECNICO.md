@@ -187,10 +187,11 @@ Errores: 400 id inválido / mensaje vacío o mayor a 1000 caracteres · 401 no a
 Estado: listo
 
 ## Chat en tiempo real (Socket.IO)
-Conectar con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Eventos:
+Conectar con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Al conectar, el socket entra automáticamente a su **sala personal** `usuario:<id>` para recibir notificaciones. Eventos:
 - Emitir `servicio:unirse` `{ "servicio_id": 1 }` → callback `{ "ok": true, "servicio_id": 1 }` o `{ "error": "..." }`.
 - Emitir `mensaje:enviar` `{ "servicio_id": 1, "contenido": "..." }` → callback `{ "ok": true, "mensaje": { ... } }` o `{ "error": "..." }`.
 - Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }`.
+- Escuchar `notificacion:nueva` `{ "notificacion": { ... } }` (llega a la sala personal `usuario:<id>`; mismos campos que `GET /notificaciones`).
 - Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }`.
 Estado: listo
 
@@ -219,3 +220,58 @@ Respuesta 201:
 Errores: 400 tipo de objetivo/categoría inválidos, falta el servicio o la reseña, categoría que no corresponde al objetivo o comentario faltante/largo · 401 no autenticado · 403 no eres técnico (ni cliente) · 404 el servicio o la reseña no existen o no son tuyos · 409 el servicio no está en un estado reportable o ya reportaste este objetivo
 Notas: el técnico solo puede reportar reseñas **recibidas** por él. El reporte queda `pendiente` para el admin; no genera sanciones automáticas.
 Estado: listo
+
+### GET /notificaciones
+Lista las notificaciones del técnico autenticado (más recientes primero) e incluye el contador de no leídas. Mismos campos que en la app del cliente.
+Auth: sí — rol `cliente` o `tecnico`
+Query (opcional): `leida` = `true` | `false` · `page` (default 1) · `limit` (default 20, tope 50)
+Respuesta 200:
+{
+  "data": {
+    "notificaciones": [
+      {
+        "id": 5,
+        "tipo": "solicitud_nueva",
+        "titulo": "Nueva solicitud de servicio",
+        "mensaje": "Ana Pérez te solicitó un servicio en trujillo",
+        "datos": { "servicio_id": 1 },
+        "leida": false,
+        "leidaAt": null,
+        "createdAt": "2026-10-11T06:40:00.000Z"
+      }
+    ],
+    "noLeidas": 1,
+    "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 }
+  }
+}
+Errores: 400 filtro o paginación inválidos · 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+### GET /notificaciones/no-leidas
+Devuelve solo el contador de notificaciones no leídas (para el badge).
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "noLeidas": 2 } }
+Errores: 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+### PATCH /notificaciones/:id/leer
+Marca **una** notificación como leída (idempotente).
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "notificacion": { "id": 5, "tipo": "solicitud_nueva", "leida": true, "leidaAt": "2026-10-11T06:45:00.000Z", "createdAt": "2026-10-11T06:40:00.000Z" } } }
+Errores: 400 id inválido · 401 no autenticado · 403 si no es `cliente` ni `tecnico` · 404 la notificación no existe o no es tuya
+Estado: listo
+
+### PATCH /notificaciones/leer-todas
+Marca **todas** las notificaciones no leídas del técnico como leídas.
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "actualizadas": 2 } }
+Errores: 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Estado: listo
+
+#### Tipos de notificación (`tipo`)
+`solicitud_nueva`, `solicitud_aceptada`, `solicitud_rechazada`, `servicio_completado`, `servicio_cancelado`, `mensaje_nuevo`, `resena_recibida`, `propuesta_nueva`, `propuesta_aceptada`, `propuesta_rechazada`, `verificacion_aprobada`, `verificacion_observada`, `verificacion_rechazada`, `verificacion_suspendida`, `reporte_resuelto`, `reporte_descartado`.
+
+Notas: las notificaciones nacen **no leídas** y **no se pueden borrar**. El técnico recibe `verificacion_*` cuando el admin aprueba/observa/rechaza/suspende su cuenta. El socket conectado recibe en vivo `notificacion:nueva` (ver sección de Socket.IO).

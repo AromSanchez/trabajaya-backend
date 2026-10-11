@@ -118,6 +118,21 @@
 - **El admin gestiona, no sanciona:** el admin lista/filtra los reportes y los marca como **`resuelto`** o **`descartado`** con una **nota obligatoria**. Las sanciones (suspender al técnico, ocultar la reseña) se aplican **manualmente** con los endpoints ya existentes (`POST /admin/tecnicos/:id/suspender`, `POST /admin/resenas/:id/ocultar`). El reporte **no** dispara sanciones automáticas.
 - **Estados del reporte:** `pendiente` (al crearse) → `resuelto` o `descartado` (final). Resolver/descartar un reporte ya cerrado → `409`.
 
+### Favoritos y notificaciones (T12)
+- **Favoritos:** los marca **solo el cliente**, y solo sobre técnicos visibles en la búsqueda (estado `verificado` y con `oficio`); un técnico no guarda clientes favoritos. Sirven para acceder rápido a técnicos de confianza.
+- **Favoritos idempotentes:** marcar un favorito ya existente no duplica ni da error (`200`); quitarlo siempre responde `204`, exista o no. Nunca `409`/`404` por repetir la acción. Un técnico que no cumple la condición de la búsqueda no se puede marcar (`404`).
+- **Notificaciones in-app + Socket.IO:** no se usa push (FCM/APNs). Cada notificación se **persiste en la base** (leída/no leída) y además se **emite en vivo** por Socket.IO a la sala personal del usuario (`usuario:<id>`, evento `notificacion:nueva`). Si el usuario está desconectado, la ve al abrir la app por REST.
+- **Eventos que generan notificación** (se notifica a **la otra parte**, nunca al actor):
+  - Solicitud **nueva** (→ técnico), **aceptada**/**rechazada** (→ cliente).
+  - Servicio **completado**/**cancelado** (→ el otro participante).
+  - **Mensaje de chat** nuevo (→ el otro participante).
+  - **Reseña recibida** (→ técnico).
+  - **Verificación del técnico:** aprobado/observado/rechazado/suspendido (→ técnico). Reactivar emite `verificacion_aprobada`.
+  - **Propuesta** nueva (→ cliente), aceptada/rechazada (→ técnico).
+  - **Resolución de reporte:** resuelto/descartado (→ reportante).
+- **Lectura:** nacen **no leídas**; el usuario puede marcar **una** o **todas** como leídas y consultar el **contador** de no leídas (`noLeidas`). **No** se pueden borrar (por ahora). Solo el dueño accede a las suyas (`404` si es ajena) y el **admin no** entra al módulo.
+- **Las notificaciones no son estado de negocio:** se crean *best-effort* después de la operación principal; un fallo al notificar **no** revierte ni bloquea la acción (el chat, el servicio, la reseña o la resolución ya se guardaron).
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -204,5 +219,15 @@
 - **Anti-duplicado:** `findFirst({ reportanteId, servicioId, tipoObjetivo })` antes de crear → `409`. Como una reseña pertenece a un solo servicio, basta con el par `(servicio, tipoObjetivo)` para cubrir también las reseñas.
 - **Módulo `src/modules/reportes/`:** exporta `router` (rol `cliente`/`tecnico`; `POST /reportes`) y `admin` (rol `admin`; `GET /admin/reportes`, `GET /admin/reportes/:id`, `PATCH /admin/reportes/:id`). En `index.js` se montan en `/reportes` y `/admin` respectivamente (el `admin` de reportes convive con `adminRoutes`, que no captura `/admin/reportes`).
 - **Resolución:** `resolverReporte(adminId, id, { estado, nota })` exige estado `pendiente` (`409` si no) y guarda `resueltoPorId`/`notaResolucion`/`resueltoAt`. `estado` solo admite `resuelto`/`descartado` (Zod); `nota` es obligatoria (1–500).
+
+### Favoritos y notificaciones (T12)
+- **Modelo `Favorito`:** `clienteId` (Cascade), `tecnicoId` (Cascade), `@@unique([clienteId, tecnicoId])` e índice `[clienteId]`. `Usuario` suma `favoritos`; `Tecnico` suma `favoritos`. Marcar usa `upsert` sobre la clave compuesta (idempotente); quitar usa `deleteMany` (nunca falla si no existe). El listado reutiliza `DATOS_PUBLICOS_SELECT`/`tecnicoResumen` exportados por `tecnicos.service` y agrega `favoritoDesde`.
+- **Modelo `Notificacion`:** `usuarioId` (Cascade), `tipo` (`TipoNotificacion`, 16 valores), `titulo` (obligatorio), `mensaje?`, `datos Json?` (referencias como `servicio_id`, `reporte_id`, `resena_id`, `monto`), `leida` (default `false`), `leidaAt?`, `createdAt`; índices `[usuarioId, leida]` y `[usuarioId, createdAt]`. `Usuario` suma `notificaciones`. Migración `20261011184212_favoritos_notificaciones` (aditiva).
+- **Sala personal y emisión:** `socket.js` une cada conexión a `salaUsuario(id)` = `usuario:<id>` (además de la sala de servicio que ya se une a demanda). Se exporta `salaUsuario`. `notificaciones.service.crearYemitir` inserta la fila y emite `notificacion:nueva` con `{ notificacion }` serializada a esa sala.
+- **Sin dependencia circular:** `notificaciones.service` **no** requiere `socket.js` en el nivel superior; lo hace de forma **perezosa** dentro de `emitir()` (porque `socket.js` requiere `chat.service`, que a su vez requiere `notificaciones.service`). Así el grafo de `require` no se cierra.
+- **Best-effort:** `crearYemitir` envuelve todo en `try/catch` (loguea y devuelve `null`). Se invoca **después** de la transacción/estado principal en cada servicio, por lo que la notificación ya está persistida cuando responde el endpoint; un fallo de notificación no afecta la respuesta.
+- **Serialización:** `NOTIFICACION_SELECT` incluye `usuarioId` solo para dirigir la emisión; el `serializar` público lo omite (el cliente no necesita su propio id). El modulo ofrece `listar` (con filtro `leida` y `noLeidas`), `contarNoLeidas`, `marcarLeida` (idempotente) y `marcarTodasLeidas` (`updateMany`).
+- **Integraciones:** se agregaron llamadas a `crearYemitir` en `servicios.service` (7 puntos), `chat.service.enviarMensaje`, `resenas.service.crearResena`, `admin.service.registrarCambioEstado` (mapa por `estadoNuevo`) y `reportes.service.resolverReporte`. Para conocer al destinatario se ampliaron algunos `select` (p. ej. `clienteId` en aceptar/rechazar/propuesta; `tecnico.usuarioId` en servicio/reseña) y `obtenerTecnicoBasico` ahora trae `usuarioId`. Los emisores del chat funcionan tanto por REST como por Socket.IO (la notificación se crea una sola vez en `enviarMensaje`).
+- **Montaje:** `index.js` monta `/favoritos` (solo `cliente`) y `/notificaciones` (`cliente`/`tecnico`).
 
 

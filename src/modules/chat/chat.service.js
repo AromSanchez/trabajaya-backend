@@ -1,5 +1,6 @@
 const prisma = require("../../config/prisma");
 const ApiError = require("../../config/ApiError");
+const { crearYemitir } = require("../notificaciones/notificaciones.service");
 
 const ESTADOS_CHAT_ABIERTO = ["pendiente", "aceptado"];
 const LIMITE_MENSAJES_POR_DEFECTO = 30;
@@ -97,7 +98,18 @@ async function enviarMensaje(usuario, servicioIdRaw, contenidoRaw) {
     select: MENSAJE_SELECT,
   });
 
-  return serializarMensaje(mensaje);
+  const serializado = serializarMensaje(mensaje);
+  const destinatario =
+    usuario.rol === "cliente" ? servicio.tecnico.usuarioId : servicio.clienteId;
+  await crearYemitir({
+    usuarioId: destinatario,
+    tipo: "mensaje_nuevo",
+    titulo: "Nuevo mensaje",
+    mensaje: `${serializado.autor.nombre}: ${contenido.slice(0, 100)}`,
+    datos: { servicio_id: servicio.id, mensaje_id: serializado.id },
+  });
+
+  return serializado;
 }
 
 async function listarMensajes(usuario, servicioIdRaw, { page = 1, limit } = {}) {

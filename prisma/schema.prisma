@@ -88,6 +88,25 @@ enum EstadoReporte {
   descartado
 }
 
+enum TipoNotificacion {
+  solicitud_nueva
+  solicitud_aceptada
+  solicitud_rechazada
+  servicio_completado
+  servicio_cancelado
+  mensaje_nuevo
+  resena_recibida
+  propuesta_nueva
+  propuesta_aceptada
+  propuesta_rechazada
+  verificacion_aprobada
+  verificacion_observada
+  verificacion_rechazada
+  verificacion_suspendida
+  reporte_resuelto
+  reporte_descartado
+}
+
 model Configuracion {
   clave     String   @id
   valor     String
@@ -114,6 +133,8 @@ model Usuario {
   reportesCreados       Reporte[]               @relation("ReportesCreados")
   reportesRecibidos     Reporte[]               @relation("ReportesRecibidos")
   reportesResueltos     Reporte[]               @relation("ReportesResueltos")
+  favoritos             Favorito[]              @relation("FavoritosCliente")
+  notificaciones        Notificacion[]          @relation("Notificaciones")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -138,6 +159,7 @@ model Tecnico {
   calificacionPromedio Float?
   totalResenas        Int                     @default(0)
   serviciosCompletados Int                    @default(0)
+  favoritos           Favorito[]
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 }
@@ -335,4 +357,32 @@ model Reporte {
   @@index([servicioId])
   @@index([estado])
   @@index([reportanteId])
+}
+
+model Favorito {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  cliente   Usuario  @relation("FavoritosCliente", fields: [clienteId], references: [id], onDelete: Cascade)
+  tecnicoId Int
+  tecnico   Tecnico  @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clienteId, tecnicoId])
+  @@index([clienteId])
+}
+
+model Notificacion {
+  id        Int              @id @default(autoincrement())
+  usuarioId Int
+  usuario   Usuario          @relation("Notificaciones", fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo      TipoNotificacion
+  titulo    String
+  mensaje   String?
+  datos     Json?
+  leida     Boolean          @default(false)
+  leidaAt   DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([usuarioId, leida])
+  @@index([usuarioId, createdAt])
 }

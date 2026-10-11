@@ -2,6 +2,7 @@ const prisma = require("../../config/prisma");
 const ApiError = require("../../config/ApiError");
 const { urlPrivada } = require("../../config/cloudinary");
 const { recalcularReputacion } = require("../resenas/resenas.service");
+const { crearYemitir } = require("../notificaciones/notificaciones.service");
 
 const TECNICO_SELECT = {
   id: true,
@@ -72,7 +73,7 @@ async function obtenerTecnicoDetalle(id) {
 async function obtenerTecnicoBasico(id) {
   const tecnico = await prisma.tecnico.findUnique({
     where: { id },
-    select: { id: true, estadoVerificacion: true },
+    select: { id: true, usuarioId: true, estadoVerificacion: true },
   });
 
   if (!tecnico) {
@@ -82,6 +83,43 @@ async function obtenerTecnicoBasico(id) {
   return tecnico;
 }
 
+const NOTIFICACION_VERIFICACION = {
+  verificado: {
+    tipo: "verificacion_aprobada",
+    titulo: "Verificación aprobada",
+    mensaje: "Tu cuenta fue verificada y ya apareces en las búsquedas",
+  },
+  observado: {
+    tipo: "verificacion_observada",
+    titulo: "Verificación observada",
+    mensaje: "Tu verificación tiene observaciones, revisa tus documentos",
+  },
+  rechazado: {
+    tipo: "verificacion_rechazada",
+    titulo: "Verificación rechazada",
+    mensaje: "Tu verificación fue rechazada",
+  },
+  suspendido: {
+    tipo: "verificacion_suspendida",
+    titulo: "Cuenta suspendida",
+    mensaje: "Tu cuenta fue suspendida",
+  },
+};
+
+async function notificarCambioVerificacion(usuarioId, tecnicoId, estadoNuevo, comentario) {
+  const base = NOTIFICACION_VERIFICACION[estadoNuevo];
+  if (!base) {
+    return;
+  }
+  await crearYemitir({
+    usuarioId,
+    tipo: base.tipo,
+    titulo: base.titulo,
+    mensaje: comentario ? `${base.mensaje}: ${comentario}` : base.mensaje,
+    datos: { tecnico_id: tecnicoId },
+  });
+}
+
 function exigirEstado(tecnico, esperado, mensaje) {
   if (tecnico.estadoVerificacion !== esperado) {
     throw new ApiError(409, mensaje);
@@ -89,7 +127,7 @@ function exigirEstado(tecnico, esperado, mensaje) {
 }
 
 async function registrarCambioEstado(adminId, tecnico, estadoNuevo, comentario, aprobarDocumentos = false) {
-  return prisma.$transaction(async (tx) => {
+  const actualizado = await prisma.$transaction(async (tx) => {
     if (aprobarDocumentos) {
       await tx.documentoVerificacion.updateMany({
         where: { tecnicoId: tecnico.id },
@@ -113,6 +151,9 @@ async function registrarCambioEstado(adminId, tecnico, estadoNuevo, comentario, 
       select: TECNICO_SELECT,
     });
   });
+
+  await notificarCambioVerificacion(tecnico.usuarioId, tecnico.id, estadoNuevo, comentario);
+  return actualizado;
 }
 
 async function aprobar(adminId, tecnicoId, comentario) {

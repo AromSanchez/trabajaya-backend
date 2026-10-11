@@ -324,4 +324,6 @@ module.exports = {
   enviarARevision,
   buscarTecnicos,
   obtenerPerfilPublico,
+  DATOS_PUBLICOS_SELECT,
+  tecnicoResumen,
 };

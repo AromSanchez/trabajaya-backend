@@ -9,6 +9,10 @@ function salaServicio(servicioId) {
   return `servicio:${servicioId}`;
 }
 
+function salaUsuario(usuarioId) {
+  return `usuario:${usuarioId}`;
+}
+
 function obtenerIO() {
   return io;
 }
@@ -46,6 +50,8 @@ function inicializarSocket(httpServer) {
   });
 
   io.on("connection", (socket) => {
+    socket.join(salaUsuario(socket.usuario.id));
+
     socket.on("servicio:unirse", async (datos, responder) => {
       try {
         const servicioId = await chatService.validarParticipante(
@@ -81,4 +87,4 @@ function inicializarSocket(httpServer) {
   return io;
 }
 
-module.exports = { inicializarSocket, obtenerIO, salaServicio };
+module.exports = { inicializarSocket, obtenerIO, salaServicio, salaUsuario };

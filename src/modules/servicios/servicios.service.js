@@ -6,6 +6,7 @@ const {
   urlPrivada,
   CARPETA_SERVICIOS,
 } = require("../../config/cloudinary");
+const { crearYemitir } = require("../notificaciones/notificaciones.service");
 
 const HORAS_EXPIRACION = 24;
 const HORAS_CANCELACION_TARDIA = 2;
@@ -212,7 +213,7 @@ async function crearServicio(usuarioId, datos, archivos) {
 
   const tecnico = await prisma.tecnico.findUnique({
     where: { id: datos.tecnico_id },
-    select: { id: true, estadoVerificacion: true, disponible: true },
+    select: { id: true, usuarioId: true, estadoVerificacion: true, disponible: true },
   });
 
   if (!tecnico) {
@@ -291,7 +292,17 @@ async function crearServicio(usuarioId, datos, archivos) {
   }
 
   const servicio = await obtenerServicioPorId(servicioId);
-  return serializar(servicio, "cliente");
+  const serializado = serializar(servicio, "cliente");
+
+  await crearYemitir({
+    usuarioId: tecnico.usuarioId,
+    tipo: "solicitud_nueva",
+    titulo: "Nueva solicitud de servicio",
+    mensaje: `${serializado.cliente.nombre} te solicitó un servicio en ${serializado.distrito}`,
+    datos: { servicio_id: serializado.id },
+  });
+
+  return serializado;
 }
 
 async function obtenerServicioPorId(id) {
@@ -339,7 +350,7 @@ async function aceptar(usuarioId, id) {
   const tecnicoId = await tecnicoIdDeUsuario(usuarioId);
   const servicio = await prisma.servicio.findFirst({
     where: { id, tecnicoId },
-    select: { id: true, estado: true },
+    select: { id: true, estado: true, clienteId: true },
   });
 
   if (!servicio) {
@@ -365,7 +376,16 @@ async function aceptar(usuarioId, id) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  await crearYemitir({
+    usuarioId: servicio.clienteId,
+    tipo: "solicitud_aceptada",
+    titulo: "Solicitud aceptada",
+    mensaje: `${serializado.tecnico.nombre} aceptó tu solicitud`,
+    datos: { servicio_id: serializado.id },
+  });
+
+  return serializado;
 }
 
 async function rechazar(usuarioId, id, motivo) {
@@ -374,7 +394,7 @@ async function rechazar(usuarioId, id, motivo) {
   const tecnicoId = await tecnicoIdDeUsuario(usuarioId);
   const servicio = await prisma.servicio.findFirst({
     where: { id, tecnicoId },
-    select: { id: true, estado: true },
+    select: { id: true, estado: true, clienteId: true },
   });
 
   if (!servicio) {
@@ -401,7 +421,16 @@ async function rechazar(usuarioId, id, motivo) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  await crearYemitir({
+    usuarioId: servicio.clienteId,
+    tipo: "solicitud_rechazada",
+    titulo: "Solicitud rechazada",
+    mensaje: `${serializado.tecnico.nombre} rechazó tu solicitud: ${motivo}`,
+    datos: { servicio_id: serializado.id, motivo },
+  });
+
+  return serializado;
 }
 
 async function completar(usuario, id) {
@@ -440,7 +469,17 @@ async function completar(usuario, id) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const destinatario = usuario.rol === "cliente" ? servicio.tecnico.usuario.id : servicio.cliente.id;
+  await crearYemitir({
+    usuarioId: destinatario,
+    tipo: "servicio_completado",
+    titulo: "Servicio completado",
+    mensaje: `${serializado.tecnico.nombre} y ${serializado.cliente.nombre} marcaron el servicio como completado`,
+    datos: { servicio_id: serializado.id },
+  });
+
+  return serializado;
 }
 
 async function cancelar(usuario, id, motivo) {
@@ -484,7 +523,17 @@ async function cancelar(usuario, id, motivo) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const destinatario = usuario.rol === "cliente" ? servicio.tecnico.usuario.id : servicio.cliente.id;
+  await crearYemitir({
+    usuarioId: destinatario,
+    tipo: "servicio_cancelado",
+    titulo: "Servicio cancelado",
+    mensaje: `${usuario.rol === "cliente" ? serializado.cliente.nombre : serializado.tecnico.nombre} canceló el servicio: ${motivo}`,
+    datos: { servicio_id: serializado.id, motivo },
+  });
+
+  return serializado;
 }
 
 async function crearPropuesta(usuarioId, id, datos) {
@@ -493,7 +542,7 @@ async function crearPropuesta(usuarioId, id, datos) {
   const tecnicoId = await tecnicoIdDeUsuario(usuarioId);
   const servicio = await prisma.servicio.findFirst({
     where: { id, tecnicoId },
-    select: { id: true, estado: true },
+    select: { id: true, estado: true, clienteId: true },
   });
 
   if (!servicio) {
@@ -520,7 +569,16 @@ async function crearPropuesta(usuarioId, id, datos) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+  await crearYemitir({
+    usuarioId: servicio.clienteId,
+    tipo: "propuesta_nueva",
+    titulo: "Nueva propuesta de monto",
+    mensaje: `${serializado.tecnico.nombre} propuso un monto de S/ ${monto}`,
+    datos: { servicio_id: serializado.id, monto },
+  });
+
+  return serializado;
 }
 
 async function aceptarPropuesta(usuario, id) {
@@ -551,7 +609,17 @@ async function aceptarPropuesta(usuario, id) {
     });
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const destinatario = usuario.rol === "cliente" ? servicio.tecnico.usuario.id : servicio.cliente.id;
+  await crearYemitir({
+    usuarioId: destinatario,
+    tipo: "propuesta_aceptada",
+    titulo: "Propuesta aceptada",
+    mensaje: `La propuesta de S/ ${Number(propuesta.monto)} fue aceptada`,
+    datos: { servicio_id: serializado.id, monto: Number(propuesta.monto) },
+  });
+
+  return serializado;
 }
 
 async function rechazarPropuesta(usuario, id, motivo) {
@@ -580,7 +648,17 @@ async function rechazarPropuesta(usuario, id, motivo) {
     },
   });
 
-  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const serializado = serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+  const destinatario = usuario.rol === "cliente" ? servicio.tecnico.usuario.id : servicio.cliente.id;
+  await crearYemitir({
+    usuarioId: destinatario,
+    tipo: "propuesta_rechazada",
+    titulo: "Propuesta rechazada",
+    mensaje: `La propuesta fue rechazada: ${motivo ?? "sin motivo"}`,
+    datos: { servicio_id: serializado.id },
+  });
+
+  return serializado;
 }
 
 async function obtenerServicioParaActor(usuario, id) {

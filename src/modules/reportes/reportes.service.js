@@ -1,5 +1,6 @@
 const prisma = require("../../config/prisma");
 const ApiError = require("../../config/ApiError");
+const { crearYemitir } = require("../notificaciones/notificaciones.service");
 
 const LIMITE_POR_DEFECTO = 20;
 const LIMITE_MAXIMO = 50;
@@ -208,7 +209,7 @@ async function obtenerReporte(id) {
 async function resolverReporte(adminId, id, { estado, nota }) {
   const reporte = await prisma.reporte.findUnique({
     where: { id },
-    select: { id: true, estado: true },
+    select: { id: true, estado: true, reportanteId: true },
   });
 
   if (!reporte) {
@@ -227,6 +228,15 @@ async function resolverReporte(adminId, id, { estado, nota }) {
       resueltoAt: new Date(),
     },
     select: REPORTE_SELECT,
+  });
+
+  const resuelto = estado === "resuelto";
+  await crearYemitir({
+    usuarioId: reporte.reportanteId,
+    tipo: resuelto ? "reporte_resuelto" : "reporte_descartado",
+    titulo: resuelto ? "Reporte resuelto" : "Reporte descartado",
+    mensaje: `${resuelto ? "Tu reporte fue resuelto" : "Tu reporte fue descartado"}: ${nota}`,
+    datos: { reporte_id: reporte.id, estado },
   });
 
   return serializarReporte(actualizado);
