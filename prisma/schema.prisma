@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Rol {
+  cliente
+  tecnico
+  admin
+}
+
+enum EstadoVerificacion {
+  pendiente
+  aprobado
+  observado
+  rechazado
+}
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  nombre       String
+  rol          Rol      @default(cliente)
+  tecnico      Tecnico?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Tecnico {
+  id                 Int                @id @default(autoincrement())
+  usuarioId          Int                @unique
+  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  estadoVerificacion EstadoVerificacion @default(pendiente)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
