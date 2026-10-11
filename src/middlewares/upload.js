@@ -25,4 +25,29 @@ function subirArchivo(campo) {
   };
 }
 
-module.exports = { subirArchivo, TAMANO_MAXIMO_BYTES };
+function subirArchivos(campo, maximo) {
+  const cargador = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: TAMANO_MAXIMO_BYTES, files: maximo },
+  });
+
+  return (req, _res, next) => {
+    cargador.array(campo, maximo)(req, _res, (error) => {
+      if (error instanceof multer.MulterError) {
+        if (error.code === "LIMIT_FILE_SIZE") {
+          return next(new ApiError(400, "Cada archivo debe pesar como máximo 5 MB"));
+        }
+        if (error.code === "LIMIT_UNEXPECTED_FILE" || error.code === "LIMIT_FILE_COUNT") {
+          return next(new ApiError(400, `Puedes adjuntar hasta ${maximo} archivos`));
+        }
+        return next(new ApiError(400, "Archivos inválidos"));
+      }
+      if (error) {
+        return next(error);
+      }
+      return next();
+    });
+  };
+}
+
+module.exports = { subirArchivo, subirArchivos, TAMANO_MAXIMO_BYTES };

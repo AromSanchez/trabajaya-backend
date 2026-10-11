@@ -65,6 +65,11 @@ async function reactivar(req, res) {
   res.status(200).json({ data: { tecnico } });
 }
 
+async function listarCancelacionesTardias(_req, res) {
+  const usuarios = await adminService.listarCancelacionesTardias();
+  res.status(200).json({ data: { usuarios } });
+}
+
 module.exports = {
   listarTecnicos,
   obtenerTecnico,
@@ -74,4 +79,5 @@ module.exports = {
   rechazar,
   suspender,
   reactivar,
+  listarCancelacionesTardias,
 };

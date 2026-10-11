@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T8 — Solicitud de servicio y estados del servicio.**
+- **T9 — Chat en tiempo real (Socket.IO).**
 
-> **Tarea siguiente:** T9 — Chat en tiempo real (Socket.IO).
+> **Tarea siguiente:** T10 — Reseñas (solo tras servicio completado) e historial.
 
 ## Pendientes (en orden)
-- [ ] T9 — Chat en tiempo real (Socket.IO)
 - [ ] T10 — Reseñas (solo tras servicio completado) e historial
 - [ ] T11 — Reportes de incidencias
 - [ ] T12 — Favoritos y notificaciones
@@ -27,6 +26,7 @@
 - [x] **T5 — Subida de documentos de verificación (Cloudinary):** enums `TipoDocumentoVerificacion`/`EstadoDocumento`, modelo `DocumentoVerificacion`, estados de revisión, Multer (memoria, 5 MB) y endpoints `GET`/`POST`/`DELETE /tecnicos/documentos` y `POST /tecnicos/verificacion/enviar`. *(2026-10-11)*
 - [x] **T6 — Admin: revisar, aprobar, observar o rechazar técnicos:** enum `verificado` (ex `aprobado`) y `suspendido`, modelo `HistorialVerificacion`, módulo `src/modules/admin` con listado/detalle, marcado de documentos, aprobar/observar/rechazar y suspender/reactivar, y seed de admin. *(2026-10-11)*
 - [x] **T7 — Cliente: búsqueda, filtros y perfil público del técnico:** campos `especialidades` y `disponible` en `Tecnico`, módulo `src/modules/oficios` (catálogo de especialidades) y endpoints `GET /tecnicos` (búsqueda con filtros y paginación), `GET /tecnicos/:id` (perfil público) y `GET /oficios/:id/especialidades`. *(2026-10-11)*
+- [x] **T8 — Solicitud de servicio y estados del servicio:** enums `EstadoServicio`/`RolActor`, modelos `Servicio`, `FotoServicio`, `HistorialServicio` y `Configuracion`, módulo `src/modules/servicios` con crear/listar/ver, aceptar/rechazar/completar/cancelar y expiración automática a las 24 h, y endpoint admin `GET /admin/cancelaciones-tardias`. *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -88,7 +88,18 @@
 - **Rutas:** `tecnicos.routes.js` reestructurado a auth por ruta (se quitó el `router.use` global) y `GET /:id` al final para no chocar con `/perfil` y `/documentos`.
 - **Reservado T10/T8:** `calificacionPromedio`, `totalResenas` y `serviciosCompletados` se calcularán al implementar reseñas (T10) y servicios (T8); hoy son constantes.
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6 y T7)
+### T8
+- **Modelo:** enums `EstadoServicio { pendiente, aceptado, completado, rechazado, cancelado, expirado }` y `RolActor { cliente, tecnico, admin, sistema }`; modelos `Servicio` (solicitud), `FotoServicio`, `HistorialServicio` y `Configuracion`. `Usuario` suma `serviciosCliente`/`serviciosCancelados`/`serviciosCompletados`/`historialServicio`; `Tecnico` suma `servicios`. Migración `20261011063248_servicios`.
+- **Módulo `src/modules/servicios`:** `POST /servicios` (cliente, multipart con hasta 3 fotos), `GET /servicios` (cliente ve las suyas, técnico las asignadas), `GET /servicios/:id` (participantes y admin), `POST /servicios/:id/{aceptar,rechazar,completar,cancelar}`. Montado en `/servicios` con `autenticar` global y `autorizar(...)` por ruta.
+- **Reglas:** solo se puede solicitar a técnicos `verificado` + `disponible` (si no, `409`); máximo 1 pendiente por técnico y 3 pendientes en total (`409`); `fecha_hora` debe ser futura (`400`). El técnico ve la dirección recién cuando el servicio está `aceptado`; al cliente siempre. El cliente solo ve sus solicitudes y el técnico las suyas (si no, `404`).
+- **Transiciones:** aceptar/rechazar solo desde `pendiente`; completar solo desde `aceptado` y si ya llegó la `fecha_hora` (`400` si no); cancelar cliente desde `pendiente`/`aceptado`, técnico solo desde `aceptado` (motivo obligatorio); cualquier otra → `409`. Cancelar desde `aceptado` con < 2 h para la hora → `cancelacionTardia = true`.
+- **Expiración:** `expirarPendientes()` pasa a `expirado` las `pendiente` de más de 24 h y registra historial con `actorRol = sistema`; se ejecuta de forma perezosa al inicio de las operaciones del módulo.
+- **Historial:** cada cambio de estado inserta en `HistorialServicio` (actor, estado anterior/nuevo, motivo, fecha) dentro de la misma transacción que el cambio.
+- **Comisión:** valor leído de `Configuracion.comision_porcentaje` (fila `"0"` creada por `npm run seed:admin`); se guarda copiado en `Servicio.comisionPorcentaje`. No se calcula monto (sin precio ni alcance aún).
+- **Admin:** `GET /admin/cancelaciones-tardias` lista usuarios con cancelaciones tardías de los últimos 30 días, agrupados y ordenados de mayor a menor (no se muestran al público).
+- **Pendiente relacionado:** cuando exista el chat (T9) se acordarán **precio y alcance** del servicio (hoy no existen esos campos).
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7 y T8)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -101,6 +112,9 @@
 - Migración `20261011060902_perfil_publico` aplicada.
 - **T7** — con 3 técnicos verificados (marcados `verificado` en BD como setup), 1 pendiente y 1 verificado sin oficio: `GET /tecnicos` → 200 solo con los 3 verificados y `oficio` definido, orden `disponible` desc → experiencia desc (10, 8, 5); filtros `oficio=electricidad`, `distrito=trujillo` y `nombre=...` → 200 correctos; paginación `limit=2` (página 1 → 2, página 2 → 1, página fuera de rango → `[]`) con `total`/`total_paginas`; `limit=100` → recortado a 50; `GET /tecnicos/:id` → 200 con las claves públicas exactas y sin datos de contacto, `calificacionPromedio:null`; perfil de no verificado, sin oficio e inexistente → 404; `PUT /tecnicos/perfil` con 6 especialidades, especialidad > 40, duplicada y `disponible` no booleano → 400; especialidades válidas se guardan con `trim` y se reflejan en `GET`; `GET /oficios/electricidad/especialidades` y `gasfiteria` → 200, oficio inválido → 400, sin token → 401; `GET /tecnicos` como técnico → 403, sin token → 401.
 - Datos de prueba de T7 eliminados (queda solo el admin; 0 técnicos).
+- Migración `20261011063248_servicios` aplicada.
+- **T8** — con clientes y técnicos reales (verificados marcados en BD como setup) y el admin sembrado: crear solicitud válida (2 fotos) → 201 `pendiente`, `comisionPorcentaje: 0`, fotos con URL firmada, dirección visible al cliente; duplicado con el mismo técnico → 409; técnico no disponible → 409; técnico no verificado → 409; técnico inexistente → 404; fecha pasada → 400; descripción > 500 → 400; 4 fotos → 400 "hasta 3 archivos"; foto pdf → 400; listar como cliente/técnico → 200 (al técnico se le oculta la dirección en `pendiente`); otro cliente/técnico → 404; crear como técnico → 403; listar como admin → 403; sin token → 401; aceptar por no dueño → 404; aceptar → 200 `aceptado` (dirección visible al técnico); aceptar de nuevo → 409; completar antes de la fecha → 400; completar → 200 con `completadoPorRol`/`completadoAt`; completar/cancelar de nuevo → 409; rechazar sin motivo → 400, con motivo → 200 `rechazado` + `motivoRechazo`; cancelar pendiente (cliente) → 200; cancelar por técnico desde `pendiente` → 409; cancelar desde `aceptado` con 3 h → `cancelacionTardia: false`; con 1 h → `cancelacionTardia: true` (cliente y técnico); límite de 3 pendientes → 201,201,201 y cuarta → 409; expiración: una pendiente con `createdAt` de 25 h → `expirado` con historial `actorRol: sistema`; `GET /admin/cancelaciones-tardias` → 200 con los usuarios agrupados (cliente y técnico) y 403 como cliente.
+- Datos de prueba de T8 eliminados (usuarios, servicios e imágenes de Cloudinary).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*
@@ -109,3 +123,4 @@
 - [x] Cloudinary: cloud name, API key y API secret *(T5: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)* — **rotar credenciales** (se compartieron por chat).
 - [ ] Admin: definir email y contraseña reales (el seed `npm run seed:admin` usa `admin@trabajoya.com` / `123456` por defecto; **cambiar en producción**).
 - [ ] Reglas de negocio: estados del servicio y comisión
+- [ ] **Precio y alcance del servicio:** se acordarán cuando exista el chat (T9). Hoy la solicitud no tiene esos campos y la comisión es 0.

@@ -68,6 +68,23 @@
 - **Orden por defecto:** `disponible` desc → `aniosExperiencia` desc → `id` asc. Cuando existan reseñas (T10) y servicios (T8), la calificación y los servicios completados se antepondrán al desempate por experiencia. Sin parámetro de orden configurable.
 - **Paginación:** `page` (default 1) y `limit` (default 20, tope 50). El tope se recorta, no da error. La respuesta incluye `page`, `limit`, `total` y `total_paginas`; una página fuera de rango devuelve lista vacía.
 
+### Solicitud de servicio (T8)
+- **Estados del servicio:** enum propio `EstadoServicio = { pendiente, aceptado, completado, rechazado, cancelado, expirado }`. Flujo normal `pendiente → aceptado → completado`; finales alternativos `rechazado`, `cancelado`, `expirado`. **No** existen `en_camino`, `en_proceso` ni `confirmado` (quedan para una fase posterior). Solo los servicios `completado` permitirán reseña (T10) y contarán para el historial y el número de servicios del técnico.
+- **Quién cambia cada estado:**
+  - El **cliente** crea la solicitud (`pendiente`).
+  - El **técnico** acepta o rechaza (rechazar exige motivo).
+  - **Completar:** cualquiera de los dos (cliente o técnico), solo desde `aceptado` y solo si ya llegó la fecha y hora solicitadas; se guarda quién lo marcó (`completadoPorId`/`completadoPorRol`) y cuándo (`completadoAt`).
+  - **Cancelar** (motivo obligatorio): el cliente desde `pendiente` o `aceptado`; el técnico solo desde `aceptado`. Si se cancela desde `aceptado` con menos de 2 horas para la hora solicitada, se marca `cancelacionTardia = true`.
+  - Una solicitud `pendiente` sin respuesta del técnico en **24 horas** pasa a `expirado`.
+  - Cualquier otra transición responde `409`.
+- **Control de cancelaciones:** se registra quién canceló (`canceladoPorId` + `canceladoPorRol`), el motivo y si fue tardía. El admin puede listarlas agrupadas por usuario en los últimos 30 días (ver endpoint abajo). No hay sanciones automáticas ni se muestran estas cifras al público.
+- **Comisión:** durante la beta **no se cobra**. El porcentaje vive en la tabla `Configuracion` (clave `comision_porcentaje`, valor `0`), nunca fijo en el código; el servicio guarda el valor vigente al crearse en `comisionPorcentaje` (listo para activarse luego). No se calcula monto porque aún no hay precio ni alcance acordados.
+- **Precio y alcance:** se acordarán cuando exista el chat (T9). **Pendiente en PROGRESS.md.**
+- **Datos de la solicitud:** el cliente envía `tecnico_id`, `descripcion` (obligatoria, máximo 500), `fecha_hora` deseadas (futura), `distrito` y `direccion` exacta. Fotos del problema **opcionales** (máximo 3, jpg o png, máximo 5 MB por archivo) subidas como archivos privados en Cloudinary. No hay referencia, precio ni alcance.
+- **Privacidad:** el técnico ve desde `pendiente` la descripción, las fotos, la fecha y hora, y el distrito; la **dirección exacta solo aparece cuando el servicio está `aceptado` o posterior**. Nunca se comparten teléfono ni correo del cliente (solo su nombre).
+- **Una solicitud, un técnico:** solo se puede solicitar a técnicos `verificado`, no suspendidos y con `disponible = true`; si no, `409` con mensaje claro. Un cliente no puede tener más de una solicitud `pendiente` con el mismo técnico, ni más de **3 pendientes** en total (`409`).
+- **Historial de servicio:** tabla `HistorialServicio` (solo inserción, nunca se edita ni borra) con servicio, actor (`actorId`/`actorRol`), estado anterior/nuevo, motivo y fecha. Cada cambio de estado y su registro van en **una sola transacción**. Para la expiración automática no hay usuario: `actorId = null` y `actorRol = sistema`.
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -118,5 +135,15 @@
 - **Módulo `src/modules/oficios/`:** catálogo `ESPECIALIDADES_POR_OFICIO` (5 sugerencias por oficio) y endpoint `GET /oficios/:id/especialidades` protegido solo con `autenticar` (lo usa cualquier rol). `:id` debe ser un `Oficio` válido; si no, `400`.
 - **Auth por ruta en `tecnicos`:** se quitó el `router.use(autenticar, autorizar("tecnico"))` global y cada ruta declara su propio rol (`soloTecnico` / `soloCliente`), porque el módulo ahora sirve a dos roles. `GET /tecnicos/:id` va al final de la definición para no interceptar `/perfil` ni `/documentos`.
 - **Migración `20261011060902_perfil_publico`:** aditiva; agrega `Tecnico.especialidades TEXT[] DEFAULT '{}'` y `Tecnico.disponible BOOLEAN DEFAULT false`.
+
+### Servicios e historial (T8)
+- **Enum auxiliar `RolActor = { cliente, tecnico, admin, sistema }`:** se usa solo para `actorRol`/`canceladoPorRol`/`completadoPorRol`, para no meter valores "de sistema" en el enum `Rol` de autenticación.
+- **`actorId` nullable en `HistorialServicio`:** la expiración (`pendiente → expirado`) es automática y no tiene usuario; se registra con `actorId = null` y `actorRol = sistema`.
+- **Expiración perezosa:** no hay cron ni cola. `expirarPendientes()` marca como `expirado` las solicitudes `pendiente` con `createdAt` de hace más de 24 h y se ejecuta al inicio de crear/listar/obtener/aceptar/rechazar/completar/cancelar. Es idempotente.
+- **Migración `20261011063248_servicios`:** crea enums `EstadoServicio`/`RolActor`, las tablas `Configuracion`, `Servicio`, `FotoServicio` y `HistorialServicio`, y las relaciones nuevas en `Usuario`/`Tecnico`.
+- **Configuración de comisión:** fila `comision_porcentaje = "0"` en `Configuracion`, creada por `npm run seed:admin` (upsert idempotente). El servicio lee el valor con fallback `0` si la fila no existe.
+- **Fotos privadas:** `subirArchivos("fotos", 3)` (Multer en memoria) valida hasta 3 archivos de 5 MB; se suben con `subirPrivado` a `trabajoya/servicios`. Si falla la creación en BD, se borran de Cloudinary las fotos ya subidas.
+- **Orden de respuesta al cliente:** el detalle listo se consulta **fuera** de la transacción (no dentro) para no leer datos sin confirmar; los cambios de estado se hacen y se registran dentro de una transacción, y luego se re-consulta y serializa.
+- **Endpoint admin:** `GET /admin/cancelaciones-tardias` agrupa en memoria las cancelaciones tardías de los últimos 30 días por `canceladoPorId` + `canceladoPorRol` y las ordena de mayor a menor.
 
 

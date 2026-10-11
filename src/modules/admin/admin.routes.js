@@ -17,6 +17,8 @@ router.use(autenticar, autorizar("admin"));
 router.get("/tecnicos", validate(listarTecnicosSchema), controller.listarTecnicos);
 router.get("/tecnicos/:id", validate(tecnicoIdSchema), controller.obtenerTecnico);
 
+router.get("/cancelaciones-tardias", controller.listarCancelacionesTardias);
+
 router.patch(
   "/tecnicos/:id/documentos/:documentoId",
   validate(marcarDocumentoSchema),

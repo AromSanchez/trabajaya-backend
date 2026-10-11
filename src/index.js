@@ -5,6 +5,7 @@ const authRoutes = require("./modules/auth/auth.routes");
 const tecnicosRoutes = require("./modules/tecnicos/tecnicos.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
 const oficiosRoutes = require("./modules/oficios/oficios.routes");
+const serviciosRoutes = require("./modules/servicios/servicios.routes");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
 const app = express();
@@ -20,6 +21,7 @@ app.use("/auth", authRoutes);
 app.use("/tecnicos", tecnicosRoutes);
 app.use("/admin", adminRoutes);
 app.use("/oficios", oficiosRoutes);
+app.use("/servicios", serviciosRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

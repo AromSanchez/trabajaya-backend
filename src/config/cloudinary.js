@@ -9,6 +9,7 @@ cloudinary.config({
 });
 
 const CARPETA_VERIFICACION = "trabajoya/tecnicos";
+const CARPETA_SERVICIOS = "trabajoya/servicios";
 
 function subirPrivado(buffer, carpeta) {
   return new Promise((resolve, reject) => {
@@ -40,4 +41,5 @@ module.exports = {
   eliminarArchivo,
   urlPrivada,
   CARPETA_VERIFICACION,
+  CARPETA_SERVICIOS,
 };

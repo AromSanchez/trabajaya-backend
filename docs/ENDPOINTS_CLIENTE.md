@@ -97,3 +97,80 @@ Respuesta 200:
 { "data": { "oficio": "electricidad", "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos", "Cortocircuitos", "Puntos de luz", "Tomacorrientes"] } }
 Errores: 400 oficio inválido · 401 no autenticado
 Estado: listo
+
+### POST /servicios
+El cliente crea una solicitud de servicio dirigida a un solo técnico. Solo se puede solicitar a técnicos verificados y disponibles.
+Auth: sí — rol `cliente`
+Cuerpo: `multipart/form-data`
+- `tecnico_id` (obligatorio): id del técnico
+- `descripcion` (obligatorio): máximo 500 caracteres
+- `fecha_hora` (obligatorio): fecha y hora deseadas en ISO 8601, futura (p. ej. `2026-10-20T15:00:00.000Z`)
+- `distrito` (obligatorio): uno de los 11 distritos
+- `direccion` (obligatorio): dirección exacta
+- `fotos` (opcional): hasta 3 archivos jpg o png, máximo 5 MB cada uno
+Ejemplo (multipart): `tecnico_id=10`, `descripcion=Fuga de agua en la cocina`, `fecha_hora=2026-10-20T15:00:00.000Z`, `distrito=trujillo`, `direccion=Av. Siempre Viva 742`, `fotos=<archivo>`
+Respuesta 201:
+{
+  "data": {
+    "servicio": {
+      "id": 1,
+      "estado": "pendiente",
+      "descripcion": "Fuga de agua en la cocina",
+      "fechaHora": "2026-10-20T15:00:00.000Z",
+      "distrito": "trujillo",
+      "direccion": "Av. Siempre Viva 742",
+      "fotos": [ { "id": 1, "formato": "png", "bytes": 20480, "nombreOriginal": "fuga.png", "url": "https://api.cloudinary.com/v1_1/<cloud>/image/download?timestamp=...&public_id=...&signature=..." } ],
+      "cliente": { "id": 1, "nombre": "Ana Pérez" },
+      "tecnico": { "id": 10, "nombre": "Luis Ramos" },
+      "motivoRechazo": null,
+      "motivoCancelacion": null,
+      "cancelacionTardia": false,
+      "canceladoPorRol": null,
+      "canceladoAt": null,
+      "completadoPorRol": null,
+      "completadoAt": null,
+      "aceptadoAt": null,
+      "comisionPorcentaje": 0,
+      "createdAt": "2026-10-11T06:40:00.000Z",
+      "updatedAt": "2026-10-11T06:40:00.000Z"
+    }
+  }
+}
+Errores: 400 datos inválidos / fecha no futura / más de 3 fotos / foto que no es jpg o png · 401 no autenticado · 403 no eres cliente · 404 técnico no encontrado · 409 el técnico no está verificado, no está disponible, ya tienes una solicitud pendiente con ese técnico o ya tienes 3 pendientes
+Estado: listo
+
+### GET /servicios
+Lista las solicitudes del usuario autenticado: el cliente ve las suyas, el técnico las que tiene asignadas. Ordenadas por fecha de creación (más recientes primero).
+Auth: sí — rol `cliente` o `tecnico`
+Respuesta 200:
+{ "data": { "servicios": [ { "id": 1, "estado": "pendiente", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "comisionPorcentaje": 0, "createdAt": "2026-10-11T06:40:00.000Z" } ] } }
+Errores: 401 no autenticado · 403 si no es `cliente` ni `tecnico`
+Notas: el cliente siempre ve la `direccion`; al técnico se le devuelve `null` mientras el servicio esté `pendiente`.
+Estado: listo
+
+### GET /servicios/:id
+Detalle de una solicitud. Solo el cliente dueño, el técnico asignado o el admin.
+Auth: sí — rol `cliente` (dueño), `tecnico` (asignado) o `admin`
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "aceptado", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "aceptadoAt": "2026-10-11T06:45:00.000Z", "comisionPorcentaje": 0 } } }
+Errores: 400 id inválido · 401 no autenticado · 403 si no tiene permiso · 404 la solicitud no existe o no es del usuario
+Notas: la `direccion` se devuelve al técnico solo si el estado es `aceptado` o `completado`.
+Estado: listo
+
+### POST /servicios/:id/completar
+Marca la solicitud como `completada`. Puede hacerlo el cliente o el técnico, solo desde `aceptado` y solo cuando ya llegó la fecha y hora. Se guarda quién lo marcó.
+Auth: sí — rol `cliente` (dueño) o `tecnico` (asignado)
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "completado", "completadoPorRol": "cliente", "completadoAt": "2026-10-20T15:10:00.000Z" } } }
+Errores: 400 id inválido / aún no llega la fecha y hora · 401 no autenticado · 403 si no tiene permiso · 404 la solicitud no existe o no es del usuario · 409 la solicitud no está `aceptado`
+Estado: listo
+
+### POST /servicios/:id/cancelar
+Cancela la solicitud (motivo obligatorio). El cliente puede cancelar en `pendiente` o `aceptado`; el técnico solo en `aceptado`. Si se cancela desde `aceptado` con menos de 2 horas para la hora solicitada, se marca `cancelacionTardia`.
+Auth: sí — rol `cliente` (dueño) o `tecnico` (asignado)
+Body:
+{ "motivo": "Cambio de planes" }
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "cancelado", "motivoCancelacion": "Cambio de planes", "canceladoPorRol": "cliente", "cancelacionTardia": false, "canceladoAt": "2026-10-11T07:00:00.000Z" } } }
+Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado · 403 si no tiene permiso · 404 la solicitud no existe o no es del usuario · 409 no se puede cancelar en el estado actual
+Estado: listo

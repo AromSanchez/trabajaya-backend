@@ -105,3 +105,54 @@ Respuesta 200:
 { "data": { "oficio": "electricidad", "especialidades": ["Instalaciones eléctricas", "Tableros eléctricos", "Cortocircuitos", "Puntos de luz", "Tomacorrientes"] } }
 Errores: 400 oficio inválido · 401 no autenticado
 Estado: listo
+
+### GET /servicios
+Lista las solicitudes de servicio asignadas al técnico autenticado, ordenadas por fecha de creación (más recientes primero).
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 200:
+{ "data": { "servicios": [ { "id": 1, "estado": "pendiente", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": null, "fotos": [ { "id": 1, "formato": "png", "bytes": 20480, "nombreOriginal": "fuga.png", "url": "https://api.cloudinary.com/v1_1/<cloud>/image/download?timestamp=...&public_id=...&signature=..." } ], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "comisionPorcentaje": 0, "createdAt": "2026-10-11T06:40:00.000Z" } ] } }
+Errores: 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil de técnico no encontrado
+Notas: la `direccion` viene `null` mientras el servicio esté `pendiente`; aparece cuando pasa a `aceptado`. Nunca se incluye correo ni teléfono del cliente.
+Estado: listo
+
+### GET /servicios/:id
+Detalle de una solicitud asignada al técnico (o vista por el cliente dueño o el admin).
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico` asignado, `cliente` dueño o `admin`)
+Errores: 400 id inválido · 401 no autenticado · 403 sin permiso · 404 la solicitud no existe o no es del técnico
+Estado: listo
+
+### POST /servicios/:id/aceptar
+El técnico acepta una solicitud `pendiente`. Al aceptar, la dirección exacta del cliente pasa a ser visible.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "aceptado", "direccion": "Av. Siempre Viva 742", "aceptadoAt": "2026-10-11T06:45:00.000Z" } } }
+Errores: 400 id inválido · 401 no autenticado / token inválido · 403 no eres técnico · 404 la solicitud no existe o no es tuya · 409 la solicitud ya no está `pendiente`
+Estado: listo
+
+### POST /servicios/:id/rechazar
+El técnico rechaza una solicitud `pendiente`. El motivo es obligatorio.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Body:
+{ "motivo": "No cubro esa zona" }
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "rechazado", "motivoRechazo": "No cubro esa zona" } } }
+Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 no eres técnico · 404 la solicitud no existe o no es tuya · 409 la solicitud ya no está `pendiente`
+Estado: listo
+
+### POST /servicios/:id/completar
+Marca la solicitud como `completada`. Puede hacerlo el técnico o el cliente, solo desde `aceptado` y solo cuando ya llegó la fecha y hora.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico` asignado o `cliente` dueño)
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "completado", "completadoPorRol": "tecnico", "completadoAt": "2026-10-20T15:10:00.000Z" } } }
+Errores: 400 id inválido / aún no llega la fecha y hora · 401 no autenticado / token inválido · 403 sin permiso · 404 la solicitud no existe o no es tuya · 409 la solicitud no está `aceptado`
+Estado: listo
+
+### POST /servicios/:id/cancelar
+El técnico cancela una solicitud `aceptado` (motivo obligatorio). Si falta menos de 2 horas para la hora solicitada, se marca `cancelacionTardia`.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico` asignado o `cliente` dueño)
+Body:
+{ "motivo": "Salí de la ciudad" }
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "cancelado", "motivoCancelacion": "Salí de la ciudad", "canceladoPorRol": "tecnico", "cancelacionTardia": true, "canceladoAt": "2026-10-11T07:00:00.000Z" } } }
+Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 sin permiso · 404 la solicitud no existe o no es tuya · 409 no se puede cancelar en el estado actual (el técnico solo puede cancelar en `aceptado`)
+Estado: listo

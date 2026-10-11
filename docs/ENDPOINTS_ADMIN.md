@@ -96,3 +96,11 @@ Respuesta 200:
 { "data": { "tecnico": { "id": 8, "estadoVerificacion": "verificado", "usuario": { "id": 16, "email": "mario@mail.com", "nombre": "Mario Gómez" } } } }
 Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 no eres admin · 404 técnico no encontrado · 409 el técnico no está suspendido
 Estado: listo
+
+### GET /admin/cancelaciones-tardias
+Lista los usuarios (clientes y técnicos) con cancelaciones tardías en los últimos 30 días, agrupados por usuario y ordenados de mayor a menor. No hay sanciones automáticas: el admin revisa y decide. No se muestran al público.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Respuesta 200:
+{ "data": { "usuarios": [ { "usuarioId": 25, "rol": "cliente", "nombre": "Ana Pérez", "email": "ana@mail.com", "cancelacionesTardias": 2 }, { "usuarioId": 28, "rol": "tecnico", "nombre": "Mario Gómez", "email": "mario@mail.com", "cancelacionesTardias": 1 } ] } }
+Errores: 401 no autenticado / token inválido · 403 no eres admin
+Estado: listo

@@ -17,6 +17,14 @@ async function main() {
   });
 
   console.log(`Admin listo: ${admin.email} (id ${admin.id})`);
+
+  await prisma.configuracion.upsert({
+    where: { clave: "comision_porcentaje" },
+    update: {},
+    create: { clave: "comision_porcentaje", valor: "0" },
+  });
+
+  console.log("Configuración lista: comision_porcentaje = 0");
 }
 
 main()

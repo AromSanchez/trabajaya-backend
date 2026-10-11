@@ -166,6 +166,41 @@ async function marcarDocumento(adminId, tecnicoId, documentoId, { estado, coment
   return documentoConUrl(actualizado);
 }
 
+async function listarCancelacionesTardias() {
+  const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const filas = await prisma.servicio.findMany({
+    where: {
+      cancelacionTardia: true,
+      canceladoAt: { gte: desde },
+      canceladoPorId: { not: null },
+    },
+    select: {
+      canceladoPorId: true,
+      canceladoPorRol: true,
+      canceladoPor: { select: { id: true, nombre: true, email: true } },
+    },
+  });
+
+  const acumulado = new Map();
+  for (const fila of filas) {
+    const clave = `${fila.canceladoPorId}:${fila.canceladoPorRol}`;
+    const actual = acumulado.get(clave);
+    if (actual) {
+      actual.cancelacionesTardias += 1;
+    } else {
+      acumulado.set(clave, {
+        usuarioId: fila.canceladoPor.id,
+        rol: fila.canceladoPorRol,
+        nombre: fila.canceladoPor.nombre,
+        email: fila.canceladoPor.email,
+        cancelacionesTardias: 1,
+      });
+    }
+  }
+
+  return [...acumulado.values()].sort((a, b) => b.cancelacionesTardias - a.cancelacionesTardias);
+}
+
 module.exports = {
   listarTecnicos,
   obtenerTecnicoDetalle,
@@ -175,4 +210,5 @@ module.exports = {
   suspender,
   reactivar,
   marcarDocumento,
+  listarCancelacionesTardias,
 };

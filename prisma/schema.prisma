@@ -43,6 +43,28 @@ enum Distrito {
   victor_larco_herrera
 }
 
+enum EstadoServicio {
+  pendiente
+  aceptado
+  completado
+  rechazado
+  cancelado
+  expirado
+}
+
+enum RolActor {
+  cliente
+  tecnico
+  admin
+  sistema
+}
+
+model Configuracion {
+  clave     String   @id
+  valor     String
+  updatedAt DateTime @updatedAt
+}
+
 model Usuario {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -51,6 +73,10 @@ model Usuario {
   rol          Rol      @default(cliente)
   tecnico      Tecnico?
   historialVerificacion HistorialVerificacion[]
+  serviciosCliente      Servicio[]             @relation("ServiciosCliente")
+  serviciosCancelados   Servicio[]             @relation("ServiciosCancelados")
+  serviciosCompletados  Servicio[]             @relation("ServiciosCompletados")
+  historialServicio     HistorialServicio[]     @relation("HistorialServicioActor")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -70,6 +96,7 @@ model Tecnico {
   disponible          Boolean                 @default(false)
   documentos          DocumentoVerificacion[]
   historial           HistorialVerificacion[]
+  servicios           Servicio[]
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 }
@@ -118,4 +145,67 @@ model HistorialVerificacion {
   createdAt      DateTime            @default(now())
 
   @@index([tecnicoId])
+}
+
+model Servicio {
+  id                 Int            @id @default(autoincrement())
+  clienteId          Int
+  cliente            Usuario        @relation("ServiciosCliente", fields: [clienteId], references: [id])
+  tecnicoId          Int
+  tecnico            Tecnico        @relation(fields: [tecnicoId], references: [id])
+  descripcion        String
+  fechaHora          DateTime
+  distrito           Distrito
+  direccion          String
+  estado             EstadoServicio @default(pendiente)
+  motivoRechazo      String?
+  canceladoPorId     Int?
+  canceladoPor       Usuario?       @relation("ServiciosCancelados", fields: [canceladoPorId], references: [id])
+  canceladoPorRol    RolActor?
+  motivoCancelacion  String?
+  cancelacionTardia  Boolean        @default(false)
+  completadoPorId    Int?
+  completadoPor      Usuario?       @relation("ServiciosCompletados", fields: [completadoPorId], references: [id])
+  completadoPorRol   RolActor?
+  comisionPorcentaje Decimal        @default(0) @db.Decimal(5, 2)
+  aceptadoAt         DateTime?
+  completadoAt       DateTime?
+  canceladoAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  fotos              FotoServicio[]
+  historial          HistorialServicio[]
+
+  @@index([clienteId])
+  @@index([tecnicoId])
+  @@index([estado])
+}
+
+model FotoServicio {
+  id             Int      @id @default(autoincrement())
+  servicioId     Int
+  servicio       Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  publicId       String
+  resourceType   String
+  formato        String
+  bytes          Int
+  nombreOriginal String
+  createdAt      DateTime @default(now())
+
+  @@index([servicioId])
+}
+
+model HistorialServicio {
+  id             Int             @id @default(autoincrement())
+  servicioId     Int
+  servicio       Servicio        @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  actorId        Int?
+  actor          Usuario?        @relation("HistorialServicioActor", fields: [actorId], references: [id])
+  actorRol       RolActor
+  estadoAnterior EstadoServicio?
+  estadoNuevo    EstadoServicio
+  motivo         String?
+  createdAt      DateTime        @default(now())
+
+  @@index([servicioId])
 }
