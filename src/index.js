@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./modules/auth/auth.routes");
 const tecnicosRoutes = require("./modules/tecnicos/tecnicos.routes");
+const adminRoutes = require("./modules/admin/admin.routes");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
 const app = express();
@@ -16,6 +17,7 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/tecnicos", tecnicosRoutes);
+app.use("/admin", adminRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

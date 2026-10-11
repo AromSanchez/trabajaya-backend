@@ -188,8 +188,18 @@ async function enviarARevision(usuarioId) {
     documentos: { select: { tipo: true } },
   });
 
-  if (tecnico.estadoVerificacion === "en_revision") {
-    throw new ApiError(400, "Tu verificación ya está en revisión");
+  const ESTADOS_QUE_PERMITEN_ENVIO = ["pendiente", "observado"];
+  if (!ESTADOS_QUE_PERMITEN_ENVIO.includes(tecnico.estadoVerificacion)) {
+    const mensajes = {
+      en_revision: "Tu verificación ya está en revisión",
+      verificado: "Tu verificación ya está aprobada",
+      suspendido: "Tu cuenta está suspendida, no puedes enviar documentos a revisión",
+      rechazado: "Tu verificación fue rechazada",
+    };
+    throw new ApiError(
+      400,
+      mensajes[tecnico.estadoVerificacion] || "No puedes enviar documentos a revisión",
+    );
   }
 
   const tiposPresentes = new Set(tecnico.documentos.map((d) => d.tipo));

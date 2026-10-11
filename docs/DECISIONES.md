@@ -17,7 +17,9 @@
   - Web de administración → solo `admin` (`POST /auth/admin/login`).
   - Si el rol no coincide, se responde `401 Credenciales incorrectas` (el mismo mensaje que una contraseña errónea, para no revelar qué cuentas existen).
 - **Un técnico nuevo nace "pendiente":** al registrarse un técnico se crea su perfil `Tecnico` con `estadoVerificacion: "pendiente"`. Aprobar/observar/rechazar es trabajo del admin (T6).
-- **Estados de verificación:** `pendiente`, `aprobado`, `observado`, `rechazado`.
+- **Estados de verificación:** `pendiente`, `en_revision`, `verificado`, `observado`, `rechazado`, `suspendido`.
+  - **`verificado` reemplaza a `aprobado`** (renombrado en T6): es el estado del técnico aprobado y activo. No confundir con `EstadoDocumento.aprobado`, que es el estado de cada documento.
+  - **`suspendido`** (T6): un técnico verificado suspendido por el admin (por reportes o incidencias graves).
 - **La verificación y la comisión se calculan solo en el backend**, nunca confiando en lo que envía la app.
 
 ### Perfil del técnico (T4)
@@ -41,6 +43,20 @@
 - **Estado por documento:** cada `DocumentoVerificacion` tiene `estado` (`pendiente` | `aprobado` | `observado`) y `comentarioAdmin` (lo llena el admin en T6).
 - **Un archivo por request**, campo `archivo` (multipart). Formatos jpg/png/pdf; la selfie solo jpg/png. Tamaño máximo 5 MB por archivo.
 - **Reemplazo vs. acumulación:** los tipos obligatorios reemplazan el documento anterior (se borra el previo en Cloudinary); los opcionales (`cul`, `certificado_oficio`) se agregan.
+
+### Panel de administración — revisión de técnicos (T6)
+- **El admin revisa por documento y luego al técnico:** marca cada documento como `aprobado` u `observado` (con `comentarioAdmin`) y luego decide el estado del técnico.
+- **Solo desde `en_revision`:** el admin solo puede aprobar/observar/rechazar técnicos en `en_revision`. Si intenta hacerlo desde otro estado, responde `409`.
+- **Aprobar → `verificado`:** al aprobar, **todos** los documentos del técnico pasan a `aprobado`.
+- **Observar → `observado`:** el técnico ve los documentos observados (con el comentario del admin), los corrige y vuelve a enviar a revisión (T5).
+- **Rechazar → `rechazado` (definitivo):** el técnico no puede volver a enviar a revisión. Su verificación terminó.
+- **Suspensión y reactivación (excepción a la regla anterior):**
+  - El admin puede **suspender** a un técnico en estado `verificado` (por reportes o incidencias graves). La suspensión exige un **motivo obligatorio**. Pasa a `suspendido`.
+  - Un técnico `suspendido` no aparecerá en las búsquedas del cliente ni podrá recibir solicitudes nuevas (se aplicará en T7/T8).
+  - El admin puede **reactivarlo**: de `suspendido` a `verificado`, también con motivo obligatorio.
+  - Suspender/reactivar solo proceden desde `verificado`/`suspendido` respectivamente; si no, `409`.
+- **Historial de cambios de estado:** cada acción del admin (aprobar, observar, rechazar, suspender, reactivar) se registra en `HistorialVerificacion` con: técnico, admin (quién lo hizo), estado anterior, estado nuevo, comentario/motivo y fecha. Los envíos del técnico no van aquí (su fecha queda en `Tecnico.documentosEnviadosAt`), porque el historial exige un admin.
+- **Admin por seed:** el rol `admin` se crea con `npm run seed:admin` (lee `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NOMBRE`; por defecto `admin@trabajoya.com` / `123456`). **Cambiar la contraseña por defecto** en cualquier entorno real.
 
 ## Técnicas
 
@@ -80,5 +96,12 @@
 - **`eliminarArchivo(publicId, resourceType)`** borra el recurso privado en Cloudinary (se usa al reemplazar y al eliminar).
 - **Subida con Multer en memoria** (`src/middlewares/upload.js`): `memoryStorage`, límite de 5 MB y 1 archivo; los errores de Multer (`LIMIT_FILE_SIZE`) se traducen a `ApiError(400)` en español. El buffer se reenvía a Cloudinary, no se guarda en disco.
 - **Modelo `DocumentoVerificacion`** (tabla `trabajoya`): guarda `publicId`, `resourceType`, `formato`, `nombreOriginal`, `bytes`, `estado` y `comentarioAdmin`. Nuevos enums `TipoDocumentoVerificacion` y `EstadoDocumento`; `EstadoVerificacion` suma el valor `en_revision`. `Tecnico` suma `documentosEnviadosAt` y la relación `documentos`. Migración `20261011050754_documentos_verificacion`.
+
+### Panel de administración (T6)
+- **Migración de enum a mano:** como no hay datos y `prisma migrate dev` es interactivo (aviso de pérdida de datos al renombrar `aprobado`), se creó la migración `20261011060000_admin_verificacion` a mano usando `ALTER TYPE "EstadoVerificacion" RENAME VALUE 'aprobado' TO 'verificado'` + `ADD VALUE 'suspendido'` (conserva filas) y se aplicó con `prisma migrate deploy`.
+- **Modelo `HistorialVerificacion`:** `tecnicoId` (Cascade), `adminId` (Restrict), `estadoAnterior`, `estadoNuevo`, `comentario`, `createdAt`. Relaciones `Tecnico.historial` y `Usuario.historialVerificacion`.
+- **Módulo `src/modules/admin/`:** rutas bajo `/admin`, todas protegidas con `autenticar` + `autorizar("admin")`.
+- **Errores:** `409` cuando la acción no procede desde el estado actual del técnico; `404` técnico/documento inexistente; `400` validación (p. ej. motivo faltante).
+- **Seed del admin:** `prisma/seed-admin.js` (script `npm run seed:admin`) hace `upsert` por email con `rol: admin` y `bcrypt`.
 
 

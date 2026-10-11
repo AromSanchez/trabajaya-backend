@@ -86,9 +86,9 @@ Errores: 400 verificación en revisión · 401 no autenticado / token inválido 
 Estado: listo
 
 ### POST /tecnicos/verificacion/enviar
-Envía los documentos a revisión. Exige los tres obligatorios (`dni_frente`, `dni_reverso`, `selfie`). Al enviar, pasa `estadoVerificacion` de `pendiente`/`observado` a `en_revision`, guarda `documentosEnviadosAt` y reinicia el estado de los documentos a `pendiente` (limpia comentarios del admin).
+Envía los documentos a revisión. Exige los tres obligatorios (`dni_frente`, `dni_reverso`, `selfie`). Solo se permite desde `pendiente` u `observado`. Al enviar, pasa `estadoVerificacion` a `en_revision`, guarda `documentosEnviadosAt` y reinicia el estado de los documentos a `pendiente` (limpia comentarios del admin).
 Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
 Respuesta 200:
 { "data": { "estadoVerificacion": "en_revision", "documentosEnviadosAt": "2026-10-11T05:11:05.766Z" } }
-Errores: 400 faltan documentos obligatorios (`detalles.faltantes`) / ya está en revisión · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
+Errores: 400 faltan documentos obligatorios (`detalles.faltantes`) / ya está en revisión / ya está aprobada / cuenta suspendida / verificación rechazada (definitivo) · 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
 Estado: listo
