@@ -59,6 +59,12 @@ enum RolActor {
   sistema
 }
 
+enum EstadoPropuesta {
+  pendiente
+  aceptada
+  rechazada
+}
+
 model Configuracion {
   clave     String   @id
   valor     String
@@ -77,6 +83,9 @@ model Usuario {
   serviciosCancelados   Servicio[]             @relation("ServiciosCancelados")
   serviciosCompletados  Servicio[]             @relation("ServiciosCompletados")
   historialServicio     HistorialServicio[]     @relation("HistorialServicioActor")
+  mensajes              Mensaje[]
+  propuestasCreadas     Propuesta[]             @relation("PropuestasCreadas")
+  propuestasRespondidas Propuesta[]             @relation("PropuestasRespondidas")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -168,6 +177,8 @@ model Servicio {
   completadoPor      Usuario?       @relation("ServiciosCompletados", fields: [completadoPorId], references: [id])
   completadoPorRol   RolActor?
   comisionPorcentaje Decimal        @default(0) @db.Decimal(5, 2)
+  montoAcordado      Decimal?       @db.Decimal(10, 2)
+  alcanceAcordado    String?
   aceptadoAt         DateTime?
   completadoAt       DateTime?
   canceladoAt        DateTime?
@@ -175,6 +186,8 @@ model Servicio {
   updatedAt          DateTime       @updatedAt
   fotos              FotoServicio[]
   historial          HistorialServicio[]
+  mensajes           Mensaje[]
+  propuestas         Propuesta[]
 
   @@index([clienteId])
   @@index([tecnicoId])
@@ -206,6 +219,37 @@ model HistorialServicio {
   estadoNuevo    EstadoServicio
   motivo         String?
   createdAt      DateTime        @default(now())
+
+  @@index([servicioId])
+}
+
+model Mensaje {
+  id         Int      @id @default(autoincrement())
+  servicioId Int
+  servicio   Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  autorId    Int
+  autor      Usuario  @relation(fields: [autorId], references: [id])
+  autorRol   RolActor
+  contenido  String
+  createdAt  DateTime @default(now())
+
+  @@index([servicioId, createdAt])
+}
+
+model Propuesta {
+  id              Int             @id @default(autoincrement())
+  servicioId      Int
+  servicio        Servicio        @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  monto           Decimal         @db.Decimal(10, 2)
+  alcance         String
+  estado          EstadoPropuesta @default(pendiente)
+  creadaPorId     Int
+  creadaPor       Usuario         @relation("PropuestasCreadas", fields: [creadaPorId], references: [id])
+  respondidaPorId Int?
+  respondidaPor   Usuario?        @relation("PropuestasRespondidas", fields: [respondidaPorId], references: [id])
+  motivoRechazo   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@index([servicioId])
 }

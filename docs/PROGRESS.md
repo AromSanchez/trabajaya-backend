@@ -5,12 +5,11 @@
 > Solo una tarea puede estar "En curso" a la vez.
 
 ## En curso
-- **T9 — Chat en tiempo real (Socket.IO).**
+- **T10 — Reseñas (solo tras servicio completado) e historial.**
 
-> **Tarea siguiente:** T10 — Reseñas (solo tras servicio completado) e historial.
+> **Tarea siguiente:** T11 — Reportes de incidencias.
 
 ## Pendientes (en orden)
-- [ ] T10 — Reseñas (solo tras servicio completado) e historial
 - [ ] T11 — Reportes de incidencias
 - [ ] T12 — Favoritos y notificaciones
 - [ ] T13 — Datos de prueba
@@ -27,6 +26,7 @@
 - [x] **T6 — Admin: revisar, aprobar, observar o rechazar técnicos:** enum `verificado` (ex `aprobado`) y `suspendido`, modelo `HistorialVerificacion`, módulo `src/modules/admin` con listado/detalle, marcado de documentos, aprobar/observar/rechazar y suspender/reactivar, y seed de admin. *(2026-10-11)*
 - [x] **T7 — Cliente: búsqueda, filtros y perfil público del técnico:** campos `especialidades` y `disponible` en `Tecnico`, módulo `src/modules/oficios` (catálogo de especialidades) y endpoints `GET /tecnicos` (búsqueda con filtros y paginación), `GET /tecnicos/:id` (perfil público) y `GET /oficios/:id/especialidades`. *(2026-10-11)*
 - [x] **T8 — Solicitud de servicio y estados del servicio:** enums `EstadoServicio`/`RolActor`, modelos `Servicio`, `FotoServicio`, `HistorialServicio` y `Configuracion`, módulo `src/modules/servicios` con crear/listar/ver, aceptar/rechazar/completar/cancelar y expiración automática a las 24 h, y endpoint admin `GET /admin/cancelaciones-tardias`. *(2026-10-11)*
+- [x] **T9 — Chat en tiempo real (Socket.IO) y acuerdo de precio/alcance:** modelos `Mensaje` y `Propuesta` y enum `EstadoPropuesta`, campos `montoAcordado`/`alcanceAcordado` en `Servicio`, módulo `src/modules/chat` (historial y envío REST), Socket.IO con autenticación JWT y salas por servicio, y endpoints de propuesta (`crear`/`aceptar`/`rechazar`). *(2026-10-11)*
 
 ## Notas y decisiones
 ### T0
@@ -99,7 +99,15 @@
 - **Admin:** `GET /admin/cancelaciones-tardias` lista usuarios con cancelaciones tardías de los últimos 30 días, agrupados y ordenados de mayor a menor (no se muestran al público).
 - **Pendiente relacionado:** cuando exista el chat (T9) se acordarán **precio y alcance** del servicio (hoy no existen esos campos).
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6, T7 y T8)
+### T9
+- **Modelo:** enum `EstadoPropuesta { pendiente, aceptada, rechazada }`; modelos `Mensaje` (servicio, autor, `autorRol`, contenido, fecha) y `Propuesta` (servicio, monto `Decimal(10,2)`, alcance, estado, quién creó/respondió, motivo de rechazo). `Servicio` suma `montoAcordado Decimal?`, `alcanceAcordado String?` y relaciones `mensajes`/`propuestas`; `Usuario` suma `mensajes`/`propuestasCreadas`/`propuestasRespondidas`. Migración `20261011064613_chat_propuestas` (aditiva).
+- **Chat — alcance:** existe por **servicio**; se puede **escribir** mientras el servicio está `pendiente` o `aceptado` y queda **solo lectura** una vez final (`completado`/`cancelado`/`rechazado`/`expirado`). Solo **texto** (sin adjuntos). Participan únicamente el **cliente dueño** y el **técnico asignado**; el **admin no accede** a las conversaciones (es privado).
+- **Chat — REST:** `GET /chat/servicios/:id/mensajes` (historial paginado, más recientes primero y devueltos en orden ascendente) y `POST /chat/servicios/:id/mensajes` (envía y, si hay Socket.IO activo, emite `mensaje:nuevo` a la sala). Ambos solo para `cliente`/`tecnico`; un no participante recibe `404` (no se revela que el servicio existe).
+- **Chat — Socket.IO:** `src/config/socket.js` inicializa el servidor sobre el `http.Server` de Express. Autenticación en el handshake (`auth.token` → JWT); sin token o inválido, la conexión se rechaza. El cliente emite **`servicio:unirse`** (valida participación y lo une a la sala `servicio:<id>`) y **`mensaje:enviar`** `{ servicio_id, contenido }`; el servidor persiste y difunde **`mensaje:nuevo`** a la sala. Los errores vuelven por el callback y por los eventos `servicio:error`/`mensaje:error`. `index.js` ahora usa `http.createServer(app)` + `server.listen`.
+- **Precio/alcance:** el **técnico propone** (`POST /servicios/:id/propuesta` con `monto` y `alcance`) y el **cliente acepta** (`.../propuesta/aceptar`) o **rechaza** (`.../propuesta/rechazar`, motivo opcional). Al aceptar se guardan `montoAcordado` y `alcanceAcordado` en el servicio; aceptar **no** cambia el estado del servicio. Solo hay **una propuesta pendiente** a la vez: si el técnico envía otra, la pendiente anterior queda `rechazada` con motivo "Reemplazada por una nueva propuesta". Se puede proponer solo en `pendiente`/`aceptado`. La comisión sigue siendo 0 y **no** se calcula monto de comisión todavía.
+- **Dependencias:** `socket.io` (runtime) y `socket.io-client` (dev, solo para pruebas).
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8 y T9)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -115,6 +123,9 @@
 - Migración `20261011063248_servicios` aplicada.
 - **T8** — con clientes y técnicos reales (verificados marcados en BD como setup) y el admin sembrado: crear solicitud válida (2 fotos) → 201 `pendiente`, `comisionPorcentaje: 0`, fotos con URL firmada, dirección visible al cliente; duplicado con el mismo técnico → 409; técnico no disponible → 409; técnico no verificado → 409; técnico inexistente → 404; fecha pasada → 400; descripción > 500 → 400; 4 fotos → 400 "hasta 3 archivos"; foto pdf → 400; listar como cliente/técnico → 200 (al técnico se le oculta la dirección en `pendiente`); otro cliente/técnico → 404; crear como técnico → 403; listar como admin → 403; sin token → 401; aceptar por no dueño → 404; aceptar → 200 `aceptado` (dirección visible al técnico); aceptar de nuevo → 409; completar antes de la fecha → 400; completar → 200 con `completadoPorRol`/`completadoAt`; completar/cancelar de nuevo → 409; rechazar sin motivo → 400, con motivo → 200 `rechazado` + `motivoRechazo`; cancelar pendiente (cliente) → 200; cancelar por técnico desde `pendiente` → 409; cancelar desde `aceptado` con 3 h → `cancelacionTardia: false`; con 1 h → `cancelacionTardia: true` (cliente y técnico); límite de 3 pendientes → 201,201,201 y cuarta → 409; expiración: una pendiente con `createdAt` de 25 h → `expirado` con historial `actorRol: sistema`; `GET /admin/cancelaciones-tardias` → 200 con los usuarios agrupados (cliente y técnico) y 403 como cliente.
 - Datos de prueba de T8 eliminados (usuarios, servicios e imágenes de Cloudinary).
+- Migración `20261011064613_chat_propuestas` aplicada.
+- **T9** — con cliente, técnico verificado y un segundo cliente (setup por BD) y el admin sembrado: **propuesta** — cliente no puede proponer → 403; técnico propone → 201 con una propuesta `pendiente` y `montoAcordado: null`; técnico no puede aceptar → 403; cliente acepta → 200 con `montoAcordado`/`alcanceAcordado` guardados y la propuesta `aceptada`; aceptar sin pendiente → 404; nueva propuesta reemplaza la pendiente anterior (queda una sola `pendiente`); cliente rechaza → 200 con `motivoRechazo`; rechazar sin pendiente → 404; `monto` negativo → 400; `alcance` vacío → 400. **Chat REST** — cliente y técnico envían → 201; listar → 200 con 2 mensajes en orden ascendente y `paginacion.total: 2`; otro cliente → 404 (leer y enviar); sin token → 401; admin → 403; mensaje vacío y > 1000 → 400. **Socket.IO real** — cliente y técnico conectan; sin token no conecta; ambos se unen a la sala (`servicio:unirse` → `{ ok: true }`); otro cliente no se une (`error`); cliente envía y el técnico recibe `mensaje:nuevo`; mensaje vacío y servicio inexistente devuelven error. **Cierre** — cliente cancela el servicio → 200; enviar por REST y por socket tras cancelar → error (`409` / `mensaje:error`). Resultado: 45/45 comprobaciones correctas.
+- Datos de prueba de T9 eliminados (quedan solo el admin y 0 técnicos/servicios/mensajes/propuestas).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*
@@ -122,5 +133,5 @@
 - [ ] Google OAuth: Client ID y Client Secret — **postergado, fuera del MVP** *(se pedirán cuando se haga T3)*
 - [x] Cloudinary: cloud name, API key y API secret *(T5: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)* — **rotar credenciales** (se compartieron por chat).
 - [ ] Admin: definir email y contraseña reales (el seed `npm run seed:admin` usa `admin@trabajoya.com` / `123456` por defecto; **cambiar en producción**).
-- [ ] Reglas de negocio: estados del servicio y comisión
-- [ ] **Precio y alcance del servicio:** se acordarán cuando exista el chat (T9). Hoy la solicitud no tiene esos campos y la comisión es 0.
+- [x] Reglas de negocio: estados del servicio y comisión
+- [x] **Precio y alcance del servicio:** resuelto en T9 (el técnico propone y el cliente acepta; se guardan `montoAcordado`/`alcanceAcordado`). La comisión sigue en 0 y todavía no se calcula monto de comisión.

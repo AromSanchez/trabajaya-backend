@@ -156,3 +156,40 @@ Respuesta 200:
 { "data": { "servicio": { "id": 1, "estado": "cancelado", "motivoCancelacion": "Salí de la ciudad", "canceladoPorRol": "tecnico", "cancelacionTardia": true, "canceladoAt": "2026-10-11T07:00:00.000Z" } } }
 Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado / token inválido · 403 sin permiso · 404 la solicitud no existe o no es tuya · 409 no se puede cancelar en el estado actual (el técnico solo puede cancelar en `aceptado`)
 Estado: listo
+
+### POST /servicios/:id/propuesta
+El técnico envía una propuesta de precio y alcance para el servicio. Solo se puede proponer en `pendiente` o `aceptado`. Solo puede haber una propuesta pendiente a la vez: al enviar otra, la anterior queda `rechazada` ("Reemplazada por una nueva propuesta"). El cliente es quien la acepta o rechaza.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`, asignado)
+Body:
+{ "monto": 150.5, "alcance": "Cambiar tomacorrientes y revisar el tablero" }
+Respuesta 201:
+{ "data": { "servicio": { "id": 1, "estado": "pendiente", "montoAcordado": null, "propuestas": [ { "id": 1, "monto": 150.5, "alcance": "Cambiar tomacorrientes y revisar el tablero", "estado": "pendiente", "motivoRechazo": null, "creadaPor": { "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "respondidaPor": null, "createdAt": "2026-10-11T06:50:00.000Z", "updatedAt": "2026-10-11T06:50:00.000Z" } ] } } }
+Errores: 400 datos inválidos (monto > 0 y alcance obligatorio) · 401 no autenticado / token inválido · 403 no eres técnico · 404 la solicitud no existe o no es tuya · 409 no se puede proponer un precio en el estado actual
+Estado: listo
+
+### GET /chat/servicios/:id/mensajes
+Historial de la conversación del servicio (solo el técnico asignado o el cliente dueño). Paginado; mensajes en orden ascendente.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico` asignado o `cliente` dueño)
+Query (opcional): `page` (default 1), `limit` (default 30, tope 100)
+Respuesta 200:
+{ "data": { "mensajes": [ { "id": 1, "servicioId": 1, "contenido": "Hola, ¿cuándo puedes venir?", "autor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "createdAt": "2026-10-11T07:00:00.000Z" } ], "paginacion": { "page": 1, "limit": 30, "total": 1, "total_paginas": 1 } } }
+Errores: 400 id inválido / paginación inválida · 401 no autenticado / token inválido · 403 no eres técnico ni cliente · 404 la solicitud no existe o no eres participante
+Estado: listo
+
+### POST /chat/servicios/:id/mensajes
+Envía un mensaje de texto. Solo se puede escribir mientras el servicio está `pendiente` o `aceptado`; en estados finales el chat es solo lectura. Si hay Socket.IO conectado, se difunde `mensaje:nuevo` a la sala del servicio.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico` asignado o `cliente` dueño)
+Body:
+{ "contenido": "Puedo mañana a las 9" }
+Respuesta 201:
+{ "data": { "mensaje": { "id": 2, "servicioId": 1, "contenido": "Puedo mañana a las 9", "autor": { "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "createdAt": "2026-10-11T07:01:00.000Z" } } }
+Errores: 400 id inválido / mensaje vacío o mayor a 1000 caracteres · 401 no autenticado / token inválido · 403 no eres técnico ni cliente · 404 la solicitud no existe o no eres participante · 409 el chat de este servicio está cerrado
+Estado: listo
+
+## Chat en tiempo real (Socket.IO)
+Conectar con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Eventos:
+- Emitir `servicio:unirse` `{ "servicio_id": 1 }` → callback `{ "ok": true, "servicio_id": 1 }` o `{ "error": "..." }`.
+- Emitir `mensaje:enviar` `{ "servicio_id": 1, "contenido": "..." }` → callback `{ "ok": true, "mensaje": { ... } }` o `{ "error": "..." }`.
+- Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }`.
+- Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }`.
+Estado: listo

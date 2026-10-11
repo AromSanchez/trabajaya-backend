@@ -152,9 +152,9 @@ Estado: listo
 Detalle de una solicitud. Solo el cliente dueño, el técnico asignado o el admin.
 Auth: sí — rol `cliente` (dueño), `tecnico` (asignado) o `admin`
 Respuesta 200:
-{ "data": { "servicio": { "id": 1, "estado": "aceptado", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "aceptadoAt": "2026-10-11T06:45:00.000Z", "comisionPorcentaje": 0 } } }
+{ "data": { "servicio": { "id": 1, "estado": "aceptado", "descripcion": "Fuga de agua en la cocina", "fechaHora": "2026-10-20T15:00:00.000Z", "distrito": "trujillo", "direccion": "Av. Siempre Viva 742", "fotos": [], "cliente": { "id": 1, "nombre": "Ana Pérez" }, "tecnico": { "id": 10, "nombre": "Luis Ramos" }, "aceptadoAt": "2026-10-11T06:45:00.000Z", "comisionPorcentaje": 0, "montoAcordado": 150.5, "alcanceAcordado": "Cambiar tomacorrientes", "propuestas": [ { "id": 1, "monto": 150.5, "alcance": "Cambiar tomacorrientes", "estado": "aceptada", "motivoRechazo": null, "creadaPor": { "id": 10, "nombre": "Luis Ramos", "rol": "tecnico" }, "respondidaPor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "createdAt": "2026-10-11T06:50:00.000Z", "updatedAt": "2026-10-11T06:52:00.000Z" } ] } } }
 Errores: 400 id inválido · 401 no autenticado · 403 si no tiene permiso · 404 la solicitud no existe o no es del usuario
-Notas: la `direccion` se devuelve al técnico solo si el estado es `aceptado` o `completado`.
+Notas: la `direccion` se devuelve al técnico solo si el estado es `aceptado` o `completado`. Toda respuesta de un servicio incluye `montoAcordado`, `alcanceAcordado` y `propuestas`.
 Estado: listo
 
 ### POST /servicios/:id/completar
@@ -173,4 +173,49 @@ Body:
 Respuesta 200:
 { "data": { "servicio": { "id": 1, "estado": "cancelado", "motivoCancelacion": "Cambio de planes", "canceladoPorRol": "cliente", "cancelacionTardia": false, "canceladoAt": "2026-10-11T07:00:00.000Z" } } }
 Errores: 400 datos inválidos (motivo obligatorio) · 401 no autenticado · 403 si no tiene permiso · 404 la solicitud no existe o no es del usuario · 409 no se puede cancelar en el estado actual
+Estado: listo
+
+### POST /servicios/:id/propuesta/aceptar
+El cliente acepta la propuesta de precio y alcance pendiente del técnico. Al aceptar se guardan `montoAcordado` y `alcanceAcordado` en el servicio; **no** cambia el estado del servicio. Solo se puede aceptar en `pendiente` o `aceptado`.
+Auth: sí — rol `cliente` (dueño)
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "pendiente", "montoAcordado": 150.5, "alcanceAcordado": "Cambiar tomacorrientes", "propuestas": [ { "id": 1, "monto": 150.5, "alcance": "Cambiar tomacorrientes", "estado": "aceptada", "respondidaPor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" } } ] } } }
+Errores: 400 id inválido · 401 no autenticado · 403 no eres cliente · 404 la solicitud no existe, no es tuya o no hay propuesta pendiente · 409 no se puede aceptar una propuesta en el estado actual
+Estado: listo
+
+### POST /servicios/:id/propuesta/rechazar
+El cliente rechaza la propuesta pendiente del técnico (motivo opcional).
+Auth: sí — rol `cliente` (dueño)
+Body (opcional):
+{ "motivo": "Muy caro" }
+Respuesta 200:
+{ "data": { "servicio": { "id": 1, "estado": "pendiente", "propuestas": [ { "id": 1, "monto": 150.5, "alcance": "Cambiar tomacorrientes", "estado": "rechazada", "motivoRechazo": "Muy caro", "respondidaPor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" } } ] } } }
+Errores: 400 datos inválidos · 401 no autenticado · 403 no eres cliente · 404 la solicitud no existe, no es tuya o no hay propuesta pendiente · 409 no se puede rechazar una propuesta en el estado actual
+Estado: listo
+
+### GET /chat/servicios/:id/mensajes
+Historial de la conversación del servicio (solo cliente dueño o técnico asignado). Paginado; devuelve los mensajes en orden ascendente.
+Auth: sí — rol `cliente` (dueño) o `tecnico` (asignado)
+Query (opcional): `page` (default 1), `limit` (default 30, tope 100)
+Respuesta 200:
+{ "data": { "mensajes": [ { "id": 1, "servicioId": 1, "contenido": "Hola, ¿cuándo puedes venir?", "autor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "createdAt": "2026-10-11T07:00:00.000Z" } ], "paginacion": { "page": 1, "limit": 30, "total": 1, "total_paginas": 1 } } }
+Errores: 400 id inválido / paginación inválida · 401 no autenticado · 403 no eres cliente ni técnico · 404 la solicitud no existe o no eres participante
+Estado: listo
+
+### POST /chat/servicios/:id/mensajes
+Envía un mensaje de texto. Solo se puede escribir mientras el servicio está `pendiente` o `aceptado`; en estados finales el chat es solo lectura. Si hay Socket.IO conectado, se difunde `mensaje:nuevo` a la sala del servicio.
+Auth: sí — rol `cliente` (dueño) o `tecnico` (asignado)
+Body:
+{ "contenido": "Hola, ¿cuándo puedes venir?" }
+Respuesta 201:
+{ "data": { "mensaje": { "id": 1, "servicioId": 1, "contenido": "Hola, ¿cuándo puedes venir?", "autor": { "id": 1, "nombre": "Ana Pérez", "rol": "cliente" }, "createdAt": "2026-10-11T07:00:00.000Z" } } }
+Errores: 400 id inválido / mensaje vacío o mayor a 1000 caracteres · 401 no autenticado · 403 no eres cliente ni técnico · 404 la solicitud no existe o no eres participante · 409 el chat de este servicio está cerrado
+Estado: listo
+
+## Chat en tiempo real (Socket.IO)
+Conexión con `io(url, { auth: { token } })` usando el JWT del login. Sin token o con token inválido la conexión se rechaza. Eventos:
+- Emitir `servicio:unirse` `{ "servicio_id": 1 }` → callback `{ "ok": true, "servicio_id": 1 }` o `{ "error": "..." }`. Une al socket a la sala del servicio (solo si es participante).
+- Emitir `mensaje:enviar` `{ "servicio_id": 1, "contenido": "..." }` → callback `{ "ok": true, "mensaje": { ... } }` o `{ "error": "..." }`.
+- Escuchar `mensaje:nuevo` `{ "mensaje": { ... } }` (llega a todos los conectados a la sala).
+- Escuchar `servicio:error` / `mensaje:error` `{ "error": "..." }` cuando una operación falla.
 Estado: listo

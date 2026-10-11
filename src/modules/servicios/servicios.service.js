@@ -16,6 +16,21 @@ const MIME_A_EXT = {
   "image/png": "png",
 };
 
+const ESTADOS_CON_DIRECCION_TECNICO = ["aceptado", "completado"];
+const ESTADOS_CON_PROPUESTA = ["pendiente", "aceptado"];
+
+const PROPUESTA_SELECT = {
+  id: true,
+  monto: true,
+  alcance: true,
+  estado: true,
+  motivoRechazo: true,
+  createdAt: true,
+  updatedAt: true,
+  creadaPor: { select: { id: true, nombre: true, rol: true } },
+  respondidaPor: { select: { id: true, nombre: true, rol: true } },
+};
+
 const SERVICIO_SELECT = {
   id: true,
   descripcion: true,
@@ -32,14 +47,15 @@ const SERVICIO_SELECT = {
   completadoAt: true,
   aceptadoAt: true,
   comisionPorcentaje: true,
+  montoAcordado: true,
+  alcanceAcordado: true,
   createdAt: true,
   updatedAt: true,
   cliente: { select: { id: true, nombre: true } },
   tecnico: { select: { id: true, usuario: { select: { id: true, nombre: true } } } },
   fotos: { select: { id: true, publicId: true, resourceType: true, formato: true, bytes: true, nombreOriginal: true } },
+  propuestas: { orderBy: { createdAt: "desc" }, select: PROPUESTA_SELECT },
 };
-
-const ESTADOS_CON_DIRECCION_TECNICO = ["aceptado", "completado"];
 
 function fotoConUrl(foto) {
   return {
@@ -48,6 +64,30 @@ function fotoConUrl(foto) {
     bytes: foto.bytes,
     nombreOriginal: foto.nombreOriginal,
     url: urlPrivada(foto.publicId, foto.formato, foto.resourceType),
+  };
+}
+
+function serializarPropuesta(propuesta) {
+  return {
+    id: propuesta.id,
+    monto: Number(propuesta.monto),
+    alcance: propuesta.alcance,
+    estado: propuesta.estado,
+    motivoRechazo: propuesta.motivoRechazo,
+    creadaPor: {
+      id: propuesta.creadaPor.id,
+      nombre: propuesta.creadaPor.nombre,
+      rol: propuesta.creadaPor.rol,
+    },
+    respondidaPor: propuesta.respondidaPor
+      ? {
+          id: propuesta.respondidaPor.id,
+          nombre: propuesta.respondidaPor.nombre,
+          rol: propuesta.respondidaPor.rol,
+        }
+      : null,
+    createdAt: propuesta.createdAt,
+    updatedAt: propuesta.updatedAt,
   };
 }
 
@@ -72,6 +112,9 @@ function serializar(servicio, rol) {
     completadoAt: servicio.completadoAt,
     aceptadoAt: servicio.aceptadoAt,
     comisionPorcentaje: Number(servicio.comisionPorcentaje),
+    montoAcordado: servicio.montoAcordado === null ? null : Number(servicio.montoAcordado),
+    alcanceAcordado: servicio.alcanceAcordado,
+    propuestas: servicio.propuestas.map(serializarPropuesta),
     createdAt: servicio.createdAt,
     updatedAt: servicio.updatedAt,
   };
@@ -440,6 +483,102 @@ async function cancelar(usuario, id, motivo) {
   return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
 }
 
+async function crearPropuesta(usuarioId, id, datos) {
+  await expirarPendientes();
+
+  const tecnicoId = await tecnicoIdDeUsuario(usuarioId);
+  const servicio = await prisma.servicio.findFirst({
+    where: { id, tecnicoId },
+    select: { id: true, estado: true },
+  });
+
+  if (!servicio) {
+    throw new ApiError(404, "Solicitud no encontrada");
+  }
+  if (!ESTADOS_CON_PROPUESTA.includes(servicio.estado)) {
+    throw new ApiError(409, "No se puede proponer un precio en este estado");
+  }
+
+  const monto = Math.round(datos.monto * 100) / 100;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.propuesta.updateMany({
+      where: { servicioId: servicio.id, estado: "pendiente" },
+      data: { estado: "rechazada", motivoRechazo: "Reemplazada por una nueva propuesta" },
+    });
+    await tx.propuesta.create({
+      data: {
+        servicioId: servicio.id,
+        monto,
+        alcance: datos.alcance,
+        creadaPorId: usuarioId,
+      },
+    });
+  });
+
+  return serializar(await obtenerServicioPorId(servicio.id), "tecnico");
+}
+
+async function aceptarPropuesta(usuario, id) {
+  await expirarPendientes();
+
+  const servicio = await obtenerServicioParaActor(usuario, id);
+  if (!ESTADOS_CON_PROPUESTA.includes(servicio.estado)) {
+    throw new ApiError(409, "No se puede aceptar una propuesta en este estado");
+  }
+
+  const propuesta = await prisma.propuesta.findFirst({
+    where: { servicioId: servicio.id, estado: "pendiente" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, monto: true, alcance: true },
+  });
+  if (!propuesta) {
+    throw new ApiError(404, "No hay una propuesta pendiente");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.propuesta.update({
+      where: { id: propuesta.id },
+      data: { estado: "aceptada", respondidaPorId: usuario.id },
+    });
+    await tx.servicio.update({
+      where: { id: servicio.id },
+      data: { montoAcordado: propuesta.monto, alcanceAcordado: propuesta.alcance },
+    });
+  });
+
+  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+}
+
+async function rechazarPropuesta(usuario, id, motivo) {
+  await expirarPendientes();
+
+  const servicio = await obtenerServicioParaActor(usuario, id);
+  if (!ESTADOS_CON_PROPUESTA.includes(servicio.estado)) {
+    throw new ApiError(409, "No se puede rechazar una propuesta en este estado");
+  }
+
+  const propuesta = await prisma.propuesta.findFirst({
+    where: { servicioId: servicio.id, estado: "pendiente" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!propuesta) {
+    throw new ApiError(404, "No hay una propuesta pendiente");
+  }
+
+  await prisma.propuesta.update({
+    where: { id: propuesta.id },
+    data: {
+      estado: "rechazada",
+      respondidaPorId: usuario.id,
+      motivoRechazo: motivo ?? "Rechazada por el cliente",
+    },
+  });
+
+  return serializar(await obtenerServicioPorId(servicio.id), usuario.rol);
+}
+
 async function obtenerServicioParaActor(usuario, id) {
   const servicio = await prisma.servicio.findUnique({
     where: { id },
@@ -473,5 +612,8 @@ module.exports = {
   rechazar,
   completar,
   cancelar,
+  crearPropuesta,
+  aceptarPropuesta,
+  rechazarPropuesta,
   expirarPendientes,
 };

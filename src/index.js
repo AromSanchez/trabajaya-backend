@@ -1,11 +1,14 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const { createServer } = require("node:http");
 const authRoutes = require("./modules/auth/auth.routes");
 const tecnicosRoutes = require("./modules/tecnicos/tecnicos.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
 const oficiosRoutes = require("./modules/oficios/oficios.routes");
 const serviciosRoutes = require("./modules/servicios/servicios.routes");
+const chatRoutes = require("./modules/chat/chat.routes");
+const { inicializarSocket } = require("./config/socket");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
 const app = express();
@@ -22,12 +25,16 @@ app.use("/tecnicos", tecnicosRoutes);
 app.use("/admin", adminRoutes);
 app.use("/oficios", oficiosRoutes);
 app.use("/servicios", serviciosRoutes);
+app.use("/chat", chatRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = createServer(app);
+inicializarSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
 });

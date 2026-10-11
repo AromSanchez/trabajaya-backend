@@ -44,9 +44,38 @@ const motivoSchema = z.object({
   }),
 });
 
+const propuestaSchema = z.object({
+  params: z.object({ id: idPositivo }),
+  body: z.object({
+    monto: z.coerce
+      .number({ message: "El monto es obligatorio" })
+      .positive("El monto debe ser mayor que 0")
+      .max(100000, "El monto es demasiado alto"),
+    alcance: z
+      .string({ message: "El alcance es obligatorio" })
+      .trim()
+      .min(1, "El alcance es obligatorio")
+      .max(1000, "El alcance debe tener máximo 1000 caracteres"),
+  }),
+});
+
+const propuestaRechazarSchema = z.object({
+  params: z.object({ id: idPositivo }),
+  body: z.object({
+    motivo: z
+      .string()
+      .trim()
+      .min(1, "El motivo no puede estar vacío")
+      .max(500, "El motivo es demasiado largo")
+      .optional(),
+  }),
+});
+
 module.exports = {
   crearServicioSchema,
   servicioIdSchema,
   motivoSchema,
+  propuestaSchema,
+  propuestaRechazarSchema,
   FOTOS_MAX,
 };

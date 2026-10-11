@@ -79,11 +79,19 @@
   - Cualquier otra transición responde `409`.
 - **Control de cancelaciones:** se registra quién canceló (`canceladoPorId` + `canceladoPorRol`), el motivo y si fue tardía. El admin puede listarlas agrupadas por usuario en los últimos 30 días (ver endpoint abajo). No hay sanciones automáticas ni se muestran estas cifras al público.
 - **Comisión:** durante la beta **no se cobra**. El porcentaje vive en la tabla `Configuracion` (clave `comision_porcentaje`, valor `0`), nunca fijo en el código; el servicio guarda el valor vigente al crearse en `comisionPorcentaje` (listo para activarse luego). No se calcula monto porque aún no hay precio ni alcance acordados.
-- **Precio y alcance:** se acordarán cuando exista el chat (T9). **Pendiente en PROGRESS.md.**
+- **Precio y alcance:** se acuerdan en el chat (resuelto en **T9**, ver abajo).
 - **Datos de la solicitud:** el cliente envía `tecnico_id`, `descripcion` (obligatoria, máximo 500), `fecha_hora` deseadas (futura), `distrito` y `direccion` exacta. Fotos del problema **opcionales** (máximo 3, jpg o png, máximo 5 MB por archivo) subidas como archivos privados en Cloudinary. No hay referencia, precio ni alcance.
 - **Privacidad:** el técnico ve desde `pendiente` la descripción, las fotos, la fecha y hora, y el distrito; la **dirección exacta solo aparece cuando el servicio está `aceptado` o posterior**. Nunca se comparten teléfono ni correo del cliente (solo su nombre).
 - **Una solicitud, un técnico:** solo se puede solicitar a técnicos `verificado`, no suspendidos y con `disponible = true`; si no, `409` con mensaje claro. Un cliente no puede tener más de una solicitud `pendiente` con el mismo técnico, ni más de **3 pendientes** en total (`409`).
 - **Historial de servicio:** tabla `HistorialServicio` (solo inserción, nunca se edita ni borra) con servicio, actor (`actorId`/`actorRol`), estado anterior/nuevo, motivo y fecha. Cada cambio de estado y su registro van en **una sola transacción**. Para la expiración automática no hay usuario: `actorId = null` y `actorRol = sistema`.
+
+### Chat y acuerdo de precio/alcance (T9)
+- **Chat por servicio:** cada conversación pertenece a un `Servicio`. Participan **solo el cliente dueño y el técnico asignado**; el **admin no accede** a las conversaciones (son privadas). Un tercero recibe `404` (no se revela que el servicio existe).
+- **Ventana del chat:** se puede **escribir** mientras el servicio está `pendiente` o `aceptado`. Al llegar a un estado final (`completado`/`cancelado`/`rechazado`/`expirado`) el chat queda **solo lectura** (ver el historial sí, enviar no → `409`).
+- **Contenido:** solo **texto** (1–1000 caracteres, se guarda con `trim`). Sin adjuntos por ahora.
+- **Tiempo real:** Socket.IO autenticado en el handshake con el JWT (`auth.token`); sin token o inválido la conexión se rechaza. Los clientes entran a la sala `servicio:<id>` con `servicio:unirse` y envían con `mensaje:enviar`; el servidor persiste y difunde `mensaje:nuevo` a la sala. El historial también está disponible por REST.
+- **Precio y alcance:** el **técnico propone** `monto` y `alcance`; el **cliente acepta** o **rechaza** (motivo opcional). Al aceptar se copian a `Servicio.montoAcordado` y `Servicio.alcanceAcordado`. Aceptar **no** cambia el estado del servicio. Solo puede haber **una propuesta pendiente** a la vez: al proponer de nuevo, la anterior queda `rechazada` ("Reemplazada por una nueva propuesta"). Se puede proponer solo en `pendiente`/`aceptado`.
+- **Comisión:** sigue en 0 (beta). Con un `montoAcordado` la comisión monetaria **ya podría calcularse** más adelante, pero no se hace todavía.
 
 ## Técnicas
 
@@ -145,5 +153,14 @@
 - **Fotos privadas:** `subirArchivos("fotos", 3)` (Multer en memoria) valida hasta 3 archivos de 5 MB; se suben con `subirPrivado` a `trabajoya/servicios`. Si falla la creación en BD, se borran de Cloudinary las fotos ya subidas.
 - **Orden de respuesta al cliente:** el detalle listo se consulta **fuera** de la transacción (no dentro) para no leer datos sin confirmar; los cambios de estado se hacen y se registran dentro de una transacción, y luego se re-consulta y serializa.
 - **Endpoint admin:** `GET /admin/cancelaciones-tardias` agrupa en memoria las cancelaciones tardías de los últimos 30 días por `canceladoPorId` + `canceladoPorRol` y las ordena de mayor a menor.
+
+### Chat en tiempo real (T9)
+- **Socket.IO sobre el servidor HTTP de Express:** `src/index.js` usa `http.createServer(app)` y `server.listen(...)`; `inicializarSocket(server)` (en `src/config/socket.js`) crea el `Server` de Socket.IO. Se expone un singleton con `obtenerIO()` para poder emitir desde los controladores REST.
+- **Autenticación en el handshake:** middleware `io.use((socket, next) => ...)` que verifica `socket.handshake.auth.token` con `JWT_SECRET` y adjunta `socket.usuario = { id, rol }`. Sin token o inválido, la conexión se rechaza con un error.
+- **Salas por servicio:** cada socket entra a la sala `servicio:<id>` con `servicio:unirse` (valida que sea participante). Los mensajes se difunden con `io.to("servicio:<id>").emit("mensaje:nuevo", { mensaje })`.
+- **Reutilización de la lógica:** la validación de participación, la ventana del chat y la persistencia viven en `chat.service`; los usan tanto los endpoints REST como los handlers de Socket.IO. Los errores del socket se devuelven por el callback del evento y por `servicio:error`/`mensaje:error` (con el mismo mensaje en español; los errores inesperados se registran en consola y no se filtran detalles internos).
+- **Modelos:** `Mensaje` (indexado por `[servicioId, createdAt]`) y `Propuesta`. `Servicio` gana `montoAcordado`/`alcanceAcordado` y relaciones `mensajes`/`propuestas`. Migración `20261011064613_chat_propuestas` (aditiva).
+- **Propuestas:** solo una `pendiente` por servicio; el técnico puede reemplazarla (la anterior pasa a `rechazada`). Al aceptar, la propuesta queda `aceptada`, se registra quién respondió y se copian `monto`/`alcance` al servicio, todo en una transacción.
+- **Dependencias:** `socket.io` en runtime; `socket.io-client` como `devDependency` solo para las pruebas.
 
 

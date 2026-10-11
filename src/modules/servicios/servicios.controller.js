@@ -47,4 +47,38 @@ async function cancelar(req, res) {
   res.status(200).json({ data: { servicio } });
 }
 
-module.exports = { crear, listar, obtener, aceptar, rechazar, completar, cancelar };
+async function crearPropuesta(req, res) {
+  const servicio = await serviciosService.crearPropuesta(
+    req.usuario.id,
+    req.validated.params.id,
+    req.validated.body,
+  );
+  res.status(201).json({ data: { servicio } });
+}
+
+async function aceptarPropuesta(req, res) {
+  const servicio = await serviciosService.aceptarPropuesta(req.usuario, req.validated.params.id);
+  res.status(200).json({ data: { servicio } });
+}
+
+async function rechazarPropuesta(req, res) {
+  const servicio = await serviciosService.rechazarPropuesta(
+    req.usuario,
+    req.validated.params.id,
+    req.validated.body.motivo,
+  );
+  res.status(200).json({ data: { servicio } });
+}
+
+module.exports = {
+  crear,
+  listar,
+  obtener,
+  aceptar,
+  rechazar,
+  completar,
+  cancelar,
+  crearPropuesta,
+  aceptarPropuesta,
+  rechazarPropuesta,
+};
