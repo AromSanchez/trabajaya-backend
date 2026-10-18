@@ -5,6 +5,7 @@ const { createServer } = require("node:http");
 const authRoutes = require("./modules/auth/auth.routes");
 const tecnicosRoutes = require("./modules/tecnicos/tecnicos.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
+const metricasRoutes = require("./modules/metricas/metricas.routes");
 const oficiosRoutes = require("./modules/oficios/oficios.routes");
 const serviciosRoutes = require("./modules/servicios/servicios.routes");
 const chatRoutes = require("./modules/chat/chat.routes");
@@ -26,6 +27,7 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/tecnicos", tecnicosRoutes);
+app.use("/admin/metricas", metricasRoutes);
 app.use("/admin", adminRoutes);
 app.use("/oficios", oficiosRoutes);
 app.use("/servicios", serviciosRoutes);

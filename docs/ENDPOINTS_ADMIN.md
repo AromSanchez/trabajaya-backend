@@ -19,6 +19,33 @@ Respuesta 200:
 Errores: 401 no autenticado · 401 token inválido o expirado
 Estado: listo
 
+### GET /admin/metricas/dashboard
+Devuelve en una sola llamada todos los datos del panel de control: tarjetas superiores, prioridad del día, series de gráficos, distribución por estado/oficio, reportes por motivo, cancelaciones tardías por semana, tiempo medio de verificación y cola de revisión.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Query (opcional): `semanas_registros` (default 12, 1–52) · `semanas_cancelaciones` (default 8, 1–52) · `dias_reportes` (default 30, 1–365) · `limit_cola` (default 5, 1–50)
+Ejemplo: `GET /admin/metricas/dashboard?semanas_registros=12&semanas_cancelaciones=8&dias_reportes=30&limit_cola=5`
+Respuesta 200:
+{ "data": {
+  "generadoEn": "2026-10-18T20:56:20.300Z",
+  "prioridadHoy": { "tecnicosEnEspera": 15, "masAntiguoDias": 4 },
+  "tarjetas": {
+    "reportesAbiertos": { "total": 10, "vsSemanaPasada": 14, "masDe48h": 10 },
+    "tecnicosTotales": { "total": 16, "nuevosSemana": 16 },
+    "verificados": { "total": 1, "nuevosSemana": 1, "porcentajeDelTotal": 6.3 },
+    "enRevision": { "total": 15, "vsSemanaPasada": 16 }
+  },
+  "registrosVerificaciones": { "semanas": 12, "serie": [ { "semanaInicio": "2026-10-05T00:00:00.000Z", "registrosNuevos": 0, "verificados": 0 }, { "semanaInicio": "2026-10-12T00:00:00.000Z", "registrosNuevos": 16, "verificados": 1 } ] },
+  "tecnicosPorEstado": { "total": 16, "estados": [ { "estado": "pendiente", "total": 0, "porcentaje": 0 }, { "estado": "en_revision", "total": 15, "porcentaje": 93.8 }, { "estado": "verificado", "total": 1, "porcentaje": 6.3 }, { "estado": "observado", "total": 0, "porcentaje": 0 }, { "estado": "rechazado", "total": 0, "porcentaje": 0 }, { "estado": "suspendido", "total": 0, "porcentaje": 0 } ] },
+  "reportesPorMotivo": { "dias": 30, "total": 14, "motivos": [ { "categoria": "comportamiento_inapropiado", "total": 3, "porcentaje": 21.4 }, { "categoria": "trabajo_deficiente", "total": 3, "porcentaje": 21.4 } ] },
+  "cancelacionesTardiasSemanales": { "semanas": 8, "serie": [ { "semanaInicio": "2026-10-05T00:00:00.000Z", "total": 6 }, { "semanaInicio": "2026-10-12T00:00:00.000Z", "total": 1 } ], "pico": 6 },
+  "tecnicosPorOficio": { "total": 16, "oficios": [ { "oficio": "pintura", "total": 5, "porcentaje": 31.3 }, { "oficio": "electricidad", "total": 4, "porcentaje": 25 }, { "oficio": "carpinteria", "total": 3, "porcentaje": 18.8 }, { "oficio": "gasfiteria", "total": 2, "porcentaje": 12.5 }, { "oficio": "albanileria", "total": 2, "porcentaje": 12.5 } ] },
+  "tiempoVerificacion": { "promedioHoras": 38.5, "vsMesPasadoPorcentaje": -27 },
+  "colaRevision": { "tecnicos": [ { "id": 2, "nombre": "Edwin Iglesias", "oficio": "electricidad", "distrito": "trujillo", "diasEsperando": 4, "estadoDocumentos": "faltan", "faltantes": ["cul", "certificado_oficio"], "documentosEnviadosAt": "2026-10-14T05:22:39.434Z" } ] }
+} }
+Errores: 400 paginación o periodos inválidos · 401 no autenticado / token inválido · 403 no eres admin
+Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `dentroDeMeta`. `vsSemanaPasada` compara altas de los últimos 7 días contra los 7 anteriores. El tiempo de verificación solo cuenta técnicos **ya decididos** (registro → primera decisión del admin hacia `verificado`/`observado`/`rechazado`). Si no hay datos suficientes, `vsMesPasadoPorcentaje` y `promedioHoras` pueden ser `null`.
+Estado: listo
+
 ### GET /admin/tecnicos
 Lista los técnicos, opcionalmente filtrados por estado de verificación. Todos los endpoints de esta sección requieren rol `admin`.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)

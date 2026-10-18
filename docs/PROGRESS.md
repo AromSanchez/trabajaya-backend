@@ -7,13 +7,65 @@
 ## En curso
 - **T13 — Datos de prueba.**
 
-> **Tarea siguiente:** sin tareas obligatorias del MVP pendientes (T3 Google OAuth queda postergada).
+> **Tarea siguiente:** T13 — Datos de prueba (T3 Google OAuth sigue postergada).
 
 ## Pendientes (en orden)
 - [ ] T13 — Datos de prueba
 
 ## Postergadas (fuera del MVP por ahora)
 - [ ] T3 — Login con Google OAuth *(se hará más adelante; no es parte del MVP)*
+
+## Plan T15 — Métricas y gráficos del panel admin (hecho)
+
+> Endpoint único para que el frontend del panel admin arme sus gráficos. Documentado en `docs/ENDPOINTS_ADMIN.md`.
+
+### Mapeo mockup → datos
+- **Tarjetas superiores:** reportes abiertos, técnicos totales, verificados y en revisión, cada una con tendencia ("2 menos que la semana pasada", "24 nuevos esta semana") y avisos (p. ej. "1 lleva más de 48 h").
+- **Prioridad de hoy + meta semanal:** técnicos esperando revisión, el más antiguo en días y el progreso `hechas / meta` con porcentaje.
+- **Registros y verificaciones:** serie de las últimas N semanas con dos series (`registrosNuevos`, `verificados`).
+- **Técnicos por estado:** distribución por `EstadoVerificacion` (pendiente, en_revision, verificado, observado, rechazado, suspendido) con total y porcentaje.
+- **Reportes por motivo:** conteo por `CategoriaReporte` de los últimos N días con porcentaje.
+- **Cancelaciones tardías por semana:** serie semanal de servicios con `cancelacionTardia = true` (usa `canceladoAt`).
+- **Técnicos por especialidad:** conteo por `Oficio` (el mockup trae "Cerrajería/Otros", pero el catálogo real solo tiene 5 oficios — ver pregunta abierta).
+- **Cola de revisión:** técnicos `en_revision` más antiguos primero, con días esperando y estado de documentos (completos / cuántos faltan).
+- **Tiempo medio de verificación:** promedio de horas entre el registro del técnico y la primera decisión del admin, vs. mes pasado y vs. meta.
+
+### Endpoint propuesto — `GET /admin/metricas/dashboard`
+
+Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Auth: admin`. Query opcional para los periodos: `semanas_registros` (default 12), `semanas_cancelaciones` (default 8), `dias_reportes` (default 30), `limit_cola` (default 5), con topes.
+
+```
+{ data: {
+  generadoEn: "2026-10-18T15:00:00.000Z",
+  prioridadHoy: { tecnicosEnEspera, masAntiguoDias },
+  tarjetas: {
+    reportesAbiertos: { total, vsSemanaPasada, masDe48h },
+    tecnicosTotales: { total, nuevosSemana },
+    verificados: { total, nuevosSemana, porcentajeDelTotal },
+    enRevision: { total, vsSemanaPasada }
+  },
+  registrosVerificaciones: { semanas, serie: [{ semanaInicio, registrosNuevos, verificados }] },
+  tecnicosPorEstado: { total, estados: [{ estado, total, porcentaje }] },
+  reportesPorMotivo: { dias, total, motivos: [{ categoria, total, porcentaje }] },
+  cancelacionesTardiasSemanales: { semanas, serie: [{ semanaInicio, total }], pico },
+  tecnicosPorOficio: { total, oficios: [{ oficio, total, porcentaje }] },
+  tiempoVerificacion: { promedioHoras, vsMesPasadoPorcentaje },
+  colaRevision: { tecnicos: [{ id, nombre, oficio, distrito, diasEsperando, estadoDocumentos: "completos"|"faltan", faltantes, documentosEnviadosAt }] }
+} }
+```
+
+### Decisiones tomadas (respuestas de esta sesión)
+- **Metas aún no definidas:** no se muestran reportes de meta (ni `19/25` ni `48 h`). El panel muestra valores absolutos y tendencias; no se crean claves en `Configuracion` por ahora.
+- **Tiempo de verificación:** promedio desde `Tecnico.createdAt` hasta la **primera decisión** del admin (`HistorialVerificacion` con `estadoNuevo` ∈ `verificado`/`observado`/`rechazado`). **Solo técnicos ya decididos** (los `pendiente`/`en_revision` no cuentan).
+- **Técnicos por oficio:** se agrupa por el enum `Oficio` (5 valores reales). El mockup con "Cerrajería/Otros" no aplica.
+- **Un solo endpoint:** `GET /admin/metricas/dashboard` (el frontend hace una sola llamada).
+- **Tendencias:** se calculan en el backend (comparaciones contra la semana/mes anterior).
+- **Periodos por query** con valores por defecto y tope.
+
+### Notas de implementación
+- Todo se calcula en el backend con agregaciones de Prisma / SQL (no confiar en la app).
+- Módulo nuevo `src/modules/metricas/` (routes, controller, service, schemas Zod) montado en `/admin/metricas` (antes de `adminRoutes`).
+- Documentado en `docs/ENDPOINTS_ADMIN.md`.
 
 ## Hechas
 - [x] **T0 — Configuración inicial:** proyecto Express, Prisma 7, conexión a PostgreSQL, estructura de carpetas, `.env.example`, `.gitignore`. *(2026-10-10)*
@@ -29,6 +81,7 @@
 - [x] **T11 — Reportes de incidencias:** enums `TipoObjetivoReporte`/`CategoriaReporte`/`EstadoReporte` y modelo `Reporte`, módulo `src/modules/reportes` con creación ligada a un servicio (cliente→técnico, técnico→cliente, técnico→reseña), validación de categoría por objetivo, comentario obligatorio en `fraude`/`otro` y anti-duplicado, y endpoints admin para listar/filtrar, ver y resolver/descartar con nota. *(2026-10-11)*
 - [x] **T12 — Favoritos y notificaciones:** modelo `Favorito` (cliente ↔ técnico, idempotente) y `Notificacion` + enum `TipoNotificacion`, módulos `src/modules/favoritos` (solo cliente) y `src/modules/notificaciones` (in-app + Socket.IO), sala personal `usuario:<id>`, y emisión en vivo en servicios, chat, reseñas, verificación del admin y reportes. *(2026-10-11)*
 - [x] **T14 — Despliegue en Render:** seed `prisma/seed-clientes.js` (script `npm run seed:clientes`) que crea **solo admin + los 4 clientes de prueba**, sin técnicos ni Cloudinary; el `index.js` ya usa `cors()` (todos los orígenes) y `process.env.PORT`. La BD de Render arranca vacía y se sincroniza con `prisma migrate deploy`. *(2026-10-17)*
+- [x] **T15 — Métricas y gráficos del panel admin:** módulo `src/modules/metricas/` con un único `GET /admin/metricas/dashboard` (rol `admin`) que devuelve tarjetas, prioridad del día, series semanales, distribuciones, reportes por motivo, cancelaciones tardías, tiempo de verificación y cola de revisión. Sin migración. *(2026-10-18)*
 
 ## Notas y decisiones
 ### T0
@@ -143,7 +196,15 @@
 - **Start Command:** `npm start`.
 - **Seed:** ejecutar `npm run seed:clientes` una sola vez contra la BD de Render tras el primer deploy.
 
-## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10, T11 y T12)
+### T15 — Métricas del panel admin
+- **Módulo nuevo:** `src/modules/metricas/` (`metricas.routes.js`, `metricas.controller.js`, `metricas.service.js`, `metricas.schemas.js`). Montado en `/admin/metricas` **antes** de `adminRoutes` en `index.js` para no duplicar la autenticación.
+- **Un solo endpoint:** `GET /admin/metricas/dashboard` (rol `admin`) devuelve todo el panel. Query opcional con topes: `semanas_registros` (12), `semanas_cancelaciones` (8), `dias_reportes` (30), `limit_cola` (5). Sin migración (no hay cambios de esquema).
+- **Sin metas:** no se definieron meta semanal ni meta de 48 h, así que el payload no trae `meta`/`dentroDeMeta`; muestra valores absolutos y tendencias.
+- **Tiempo de verificación:** solo técnicos **ya decididos**; se toma la primera fila de `HistorialVerificacion` con `estadoNuevo` ∈ `{verificado, observado, rechazado}` por técnico y se resta `Tecnico.createdAt`. Comparación 30 vs. 30 días previos.
+- **Técnicos por oficio:** agrupado por el enum `Oficio` (no por el texto libre `especialidades`). **Cola de revisión:** `en_revision` con envío más antiguo primero, días esperando y documentos faltantes sobre los 5 tipos.
+- **Semanas UTC** (lunes 00:00) y reparto en memoria sobre consultas acotadas por rango.
+
+## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10, T11, T12 y T15)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
 - Endpoints (servidor real en `localhost:3000`): `POST /auth/cliente/registro` → 201; `POST /auth/tecnico/registro` → 201 (crea perfil `pendiente`, comprobado en BD); login cliente y técnico → 200; credencial técnica en login de cliente → 401; email duplicado → 409; password corta → 400; email inválido → 400; `admin/login` sin admin → 401; ruta inexistente → 404.
 - **T2** — `GET /auth/perfil`: sin token → 401; token inválido → 401; token válido (cliente y tecnico) → 200 con datos propios. Middleware `autorizar("admin")` en app de prueba: sin token → 401; token inválido → 401; rol cliente/tecnico → 403; rol admin → 200.
@@ -171,6 +232,7 @@
 - Migración `20261011184212_favoritos_notificaciones` aplicada.
 - **T12** — con cliente, segundo cliente, tres técnicos (dos verificados con oficio por BD) y el admin sembrado: **favoritos** — marcar → `200` con `favorito: true`; marcar repetido → `200` sin duplicar (1 fila en BD); listar → `200` con datos públicos (`verificado: true`, `oficio`); técnico en la ruta → `403`; quitar → `204`, repetido → `204`; restantes → `1`; técnico no verificado → `404`. **Notificaciones** — crear servicio → técnico recibe `solicitud_nueva`; aceptar → `solicitud_aceptada`; propuesta → `propuesta_nueva`; aceptar propuesta → `propuesta_aceptada`; mensaje de chat → `mensaje_nuevo`; completar → `servicio_completado`; reseña → `resena_recibida`; cancelar → `servicio_cancelado`; resolver reporte → `reporte_resuelto`; aprobar técnico → `verificacion_aprobada`; suspender → `verificacion_suspendida`. **Lectura/contador** — `noLeidas > 0`; marcar una → `200` y `leida: true`, el contador baja 1; `GET /notificaciones/no-leidas` → número; `PATCH /notificaciones/leer-todas` → `noLeidas: 0`; filtros `leida=true`/`false` correctos. **Acceso** — otro usuario marca ajena → `404`; admin en `/notificaciones` → `403`. **Socket.IO real** — un cliente emite y el técnico conectado (sala `usuario:<id>`) recibe `notificacion:nueva` con `tipo: solicitud_nueva` en vivo. Resultado: **42/42 comprobaciones correctas**.
 - Datos de prueba de T12 eliminados (queda solo el admin; 0 técnicos/servicios/favoritos/notificaciones).
+- **T15** — servidor real (`localhost:3000`) con la BD local: sin token → `401`; query inválida (`?dias_reportes=999`) y no numérica (`?limit_cola=abc`) → `400 Datos inválidos`; con token admin y data demo (16 técnicos, 14 reportes) → `200` con todos los bloques correctos: `tecnicosPorEstado` (15 `en_revision`, 1 `verificado`, suma 16), `tecnicosPorOficio` (pintura 5, electricidad 4, carpintería 3, gasfitería 2, albañilería 2; porcentajes suman 100), `reportesPorMotivo` (14 repartidos por categoría), `registrosVerificaciones` (12 semanas, 16 registros y 1 verificado en la semana en curso), `cancelacionesTardiasSemanales` (8 semanas, pico 6), `colaRevision` (5 más antiguos, `faltantes: [cul, certificado_oficio]`) y `tiempoVerificacion` (`promedioHoras: 0` por datos del seed).
 
 ## Pendiente del equipo (datos que debe dar el humano)
 - [x] URL de la base de datos PostgreSQL *(`DATABASE_URL` en `.env`)*

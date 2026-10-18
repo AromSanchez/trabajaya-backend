@@ -133,6 +133,15 @@
 - **Lectura:** nacen **no leídas**; el usuario puede marcar **una** o **todas** como leídas y consultar el **contador** de no leídas (`noLeidas`). **No** se pueden borrar (por ahora). Solo el dueño accede a las suyas (`404` si es ajena) y el **admin no** entra al módulo.
 - **Las notificaciones no son estado de negocio:** se crean *best-effort* después de la operación principal; un fallo al notificar **no** revierte ni bloquea la acción (el chat, el servicio, la reseña o la resolución ya se guardaron).
 
+### Métricas del panel de administración (T15)
+- **Un solo endpoint para todo el panel:** `GET /admin/metricas/dashboard` devuelve en una sola llamada las tarjetas, series y distribuciones. El frontend arma los gráficos; el cálculo siempre es del backend.
+- **Sin metas por ahora:** todavía no se definen la meta semanal de verificaciones ni la meta de tiempo (48 h), así que **no** se devuelven `meta` ni indicadores de cumplimiento, y **no** se crean claves en `Configuracion`. El panel muestra valores absolutos y tendencias.
+- **Tiempo de verificación:** promedio desde `Tecnico.createdAt` (registro) hasta la **primera decisión** del admin (`HistorialVerificacion` con `estadoNuevo` ∈ `verificado`/`observado`/`rechazado`). Solo cuentan técnicos **ya decididos**; los que siguen `pendiente`/`en_revision` no entran. La comparación es último bloque de 30 días vs. los 30 anteriores.
+- **Técnicos por oficio:** se agrupa por el enum `Oficio` (5 valores reales). El mockup con "Cerrajería/Otros oficios" no aplica al catálogo actual.
+- **"En revisión" (tendencia):** se compara el número de técnicos que enviaron a revisión (`documentosEnviadosAt`) en los últimos 7 días contra los 7 anteriores. **Reportes abiertos** compara reportes creados últimos 7 días vs. 7 anteriores; `masDe48h` cuenta reportes `pendiente` con más de 48 h.
+- **Cola de revisión:** técnicos `en_revision` ordenados por envío más antiguo primero, con días de espera y documentos faltantes (sobre los 5 tipos; en `en_revision` los 3 obligatorios ya están).
+- **Series semanales:** desde el lunes (UTC). `registrosVerificaciones` usa los registros (`Tecnico.createdAt`) y las verificaciones (primeras decisiones hacia `verificado`) por semana; `cancelacionesTardiasSemanales` usa `Servicio.cancelacionTardia` agrupado por `canceladoAt`. Los periodos son por query con topes.
+
 ## Técnicas
 
 ### ORM y base de datos
@@ -235,5 +244,13 @@
 - **Serialización:** `NOTIFICACION_SELECT` incluye `usuarioId` solo para dirigir la emisión; el `serializar` público lo omite (el cliente no necesita su propio id). El modulo ofrece `listar` (con filtro `leida` y `noLeidas`), `contarNoLeidas`, `marcarLeida` (idempotente) y `marcarTodasLeidas` (`updateMany`).
 - **Integraciones:** se agregaron llamadas a `crearYemitir` en `servicios.service` (7 puntos), `chat.service.enviarMensaje`, `resenas.service.crearResena`, `admin.service.registrarCambioEstado` (mapa por `estadoNuevo`) y `reportes.service.resolverReporte`. Para conocer al destinatario se ampliaron algunos `select` (p. ej. `clienteId` en aceptar/rechazar/propuesta; `tecnico.usuarioId` en servicio/reseña) y `obtenerTecnicoBasico` ahora trae `usuarioId`. Los emisores del chat funcionan tanto por REST como por Socket.IO (la notificación se crea una sola vez en `enviarMensaje`).
 - **Montaje:** `index.js` monta `/favoritos` (solo `cliente`) y `/notificaciones` (`cliente`/`tecnico`).
+
+### Métricas del panel admin (T15)
+- **Módulo `src/modules/metricas/`:** `routes` (montado en `/admin/metricas` con `autenticar` + `autorizar("admin")`), `controller` y `service`. Se monta **antes** de `adminRoutes` en `index.js` para que `/admin/metricas/dashboard` no pase por el `router.use` de admin (evita autenticar dos veces).
+- **Sin migración:** no hay cambios de esquema ni tablas nuevas; todo se calcula con agregaciones sobre lo existente.
+- **Agregaciones:** `groupBy` de Prisma para estado de verificación, oficio y categoría de reporte; `count` para las tarjetas; el resto se arma en memoria a partir de consultas acotadas por rango de fechas (volúmenes pequeños en este proyecto).
+- **Primeras decisiones:** se leen las filas de `HistorialVerificacion` con `estadoNuevo` ∈ `{verificado, observado, rechazado}` ordenadas por fecha y se conserva la primera por técnico (`Map`); esa lista alimenta la serie de verificados y el tiempo medio.
+- **Semanas UTC:** helper `inicioSemanaUTC` fija el lunes 00:00 UTC y `serieSemanas(n)` genera las n semanas hasta la actual; el reparto por semana es O(items × semanas).
+- **Zod:** `dashboardSchema` valida la query con `z.coerce.number().int().default(...)` y topes; sin parámetros, aplican los defaults. Códigos fuera de rango → `400 Datos inválidos`.
 
 
