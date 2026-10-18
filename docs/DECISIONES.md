@@ -220,6 +220,12 @@
 - **Módulo `src/modules/reportes/`:** exporta `router` (rol `cliente`/`tecnico`; `POST /reportes`) y `admin` (rol `admin`; `GET /admin/reportes`, `GET /admin/reportes/:id`, `PATCH /admin/reportes/:id`). En `index.js` se montan en `/reportes` y `/admin` respectivamente (el `admin` de reportes convive con `adminRoutes`, que no captura `/admin/reportes`).
 - **Resolución:** `resolverReporte(adminId, id, { estado, nota })` exige estado `pendiente` (`409` si no) y guarda `resueltoPorId`/`notaResolucion`/`resueltoAt`. `estado` solo admite `resuelto`/`descartado` (Zod); `nota` es obligatoria (1–500).
 
+### Despliegue en Render (T14)
+- **Hosting:** el backend se despliega en Render como **Web Service** (Node) con la base PostgreSQL gestionada de Render. Conexión por la **Internal Database URL** en `DATABASE_URL`.
+- **CORS abierto:** `app.use(cors())` permite **todos los orígenes** (las tres apps: cliente Flutter, técnico Flutter y web admin), sin restringir por lista.
+- **Migraciones en el deploy:** como el repo ya tiene `prisma/migrations/`, la BD (aunque arranque vacía) se sincroniza con `npx prisma migrate deploy` en el **Pre-Deploy Command**, no con `db push`.
+- **Seed de producción mínimo:** para el despliegue se usa `npm run seed:clientes` (solo admin + clientes de prueba), **sin técnicos** y **sin Cloudinary**; se ejecuta una sola vez contra la BD de Render.
+
 ### Favoritos y notificaciones (T12)
 - **Modelo `Favorito`:** `clienteId` (Cascade), `tecnicoId` (Cascade), `@@unique([clienteId, tecnicoId])` e índice `[clienteId]`. `Usuario` suma `favoritos`; `Tecnico` suma `favoritos`. Marcar usa `upsert` sobre la clave compuesta (idempotente); quitar usa `deleteMany` (nunca falla si no existe). El listado reutiliza `DATOS_PUBLICOS_SELECT`/`tecnicoResumen` exportados por `tecnicos.service` y agrega `favoritoDesde`.
 - **Modelo `Notificacion`:** `usuarioId` (Cascade), `tipo` (`TipoNotificacion`, 16 valores), `titulo` (obligatorio), `mensaje?`, `datos Json?` (referencias como `servicio_id`, `reporte_id`, `resena_id`, `monto`), `leida` (default `false`), `leidaAt?`, `createdAt`; índices `[usuarioId, leida]` y `[usuarioId, createdAt]`. `Usuario` suma `notificaciones`. Migración `20261011184212_favoritos_notificaciones` (aditiva).

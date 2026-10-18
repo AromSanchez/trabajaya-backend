@@ -28,6 +28,7 @@
 - [x] **T10 — Reseñas (solo tras servicio completado) e historial:** modelo `Resena` y campos de reputación en `Tecnico` (`calificacionPromedio`, `totalResenas`, `serviciosCompletados`), módulo `src/modules/resenas` (crear reseña, listado público e historial por rol), recalculo de reputación en transacción, orden de búsqueda por calificación y ocultación de reseñas por el admin. *(2026-10-11)*
 - [x] **T11 — Reportes de incidencias:** enums `TipoObjetivoReporte`/`CategoriaReporte`/`EstadoReporte` y modelo `Reporte`, módulo `src/modules/reportes` con creación ligada a un servicio (cliente→técnico, técnico→cliente, técnico→reseña), validación de categoría por objetivo, comentario obligatorio en `fraude`/`otro` y anti-duplicado, y endpoints admin para listar/filtrar, ver y resolver/descartar con nota. *(2026-10-11)*
 - [x] **T12 — Favoritos y notificaciones:** modelo `Favorito` (cliente ↔ técnico, idempotente) y `Notificacion` + enum `TipoNotificacion`, módulos `src/modules/favoritos` (solo cliente) y `src/modules/notificaciones` (in-app + Socket.IO), sala personal `usuario:<id>`, y emisión en vivo en servicios, chat, reseñas, verificación del admin y reportes. *(2026-10-11)*
+- [x] **T14 — Despliegue en Render:** seed `prisma/seed-clientes.js` (script `npm run seed:clientes`) que crea **solo admin + los 4 clientes de prueba**, sin técnicos ni Cloudinary; el `index.js` ya usa `cors()` (todos los orígenes) y `process.env.PORT`. La BD de Render arranca vacía y se sincroniza con `prisma migrate deploy`. *(2026-10-17)*
 
 ## Notas y decisiones
 ### T0
@@ -133,6 +134,15 @@
 - **Puntos de integración:** `servicios.service` (crear→`solicitud_nueva`, aceptar→`solicitud_aceptada`, rechazar→`solicitud_rechazada`, completar→`servicio_completado`, cancelar→`servicio_cancelado`, propuesta nueva/aceptada/rechazada), `chat.service` (mensaje→`mensaje_nuevo`), `resenas.service` (→`resena_recibida`), `admin.service` (verificación→según estado nuevo) y `reportes.service` (resolver/descartar→`reporte_resuelto`/`reporte_descartado`). En cada caso se notifica **a la otra parte** (nunca al actor).
 - **Verificación:** mapa `estadoNuevo` → notificación (`verificado`→`verificacion_aprobada`, `observado`→`verificacion_observada`, `rechazado`→`verificacion_rechazada`, `suspendido`→`verificacion_suspendida`). **Reactivar** (`suspendido → verificado`) reutiliza `verificacion_aprobada`.
 - **Montaje:** `index.js` añade `/favoritos` y `/notificaciones`.
+
+### T14 — Despliegue en Render
+- **Seed solo admin + clientes:** `prisma/seed-clientes.js` (script `npm run seed:clientes`). Crea el admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NOMBRE`, por defecto `admin@trabajoya.com` / `341600`) y los 4 clientes del demo (`arom.sanchez`, `carlos.caceres`, `alan.roncal`, `mauricio.amando`, password `123456`), todos con `upsert` idempotente. No crea técnicos ni sube nada a Cloudinary. También asegura `Configuracion.comision_porcentaje = "0"`.
+- **CORS y puerto:** `src/index.js` ya usa `app.use(cors())` (permite todos los orígenes) y `const PORT = process.env.PORT || 3000`. No se requirió cambio de código.
+- **BD de Render:** está vacía (sin tablas) pero el repo **sí** tiene migraciones (`prisma/migrations/`), así que se sincroniza con `npx prisma migrate deploy` (no `db push`).
+- **Build Command:** `npm ci && npx prisma generate`.
+- **Pre-Deploy Command:** `npx prisma migrate deploy`.
+- **Start Command:** `npm start`.
+- **Seed:** ejecutar `npm run seed:clientes` una sola vez contra la BD de Render tras el primer deploy.
 
 ## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10, T11 y T12)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".
