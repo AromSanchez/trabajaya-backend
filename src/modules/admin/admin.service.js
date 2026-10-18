@@ -12,9 +12,21 @@ const TECNICO_SELECT = {
   aniosExperiencia: true,
   distritos: true,
   disponibilidad: true,
+  calificacionPromedio: true,
+  totalResenas: true,
+  serviciosCompletados: true,
   documentosEnviadosAt: true,
   createdAt: true,
   usuario: { select: { id: true, email: true, nombre: true } },
+};
+
+const ORDEN_TECNICOS = {
+  recientes: [{ createdAt: "desc" }, { id: "desc" }],
+  antiguos: [{ createdAt: "asc" }, { id: "asc" }],
+  experiencia: [{ aniosExperiencia: { sort: "desc", nulls: "last" } }, { id: "asc" }],
+  servicios: [{ serviciosCompletados: "desc" }, { id: "asc" }],
+  calificacion: [{ calificacionPromedio: { sort: "desc", nulls: "last" } }, { id: "asc" }],
+  nombre: [{ usuario: { nombre: "asc" } }, { id: "asc" }],
 };
 
 const DOCUMENTO_SELECT = {
@@ -35,10 +47,25 @@ function documentoConUrl(doc) {
   return { ...doc, url: urlPrivada(doc.publicId, doc.formato, doc.resourceType) };
 }
 
-async function listarTecnicos({ estado } = {}) {
+async function listarTecnicos({ estado, oficio, nombre, orden } = {}) {
+  const where = {
+    ...(estado ? { estadoVerificacion: estado } : {}),
+    ...(oficio ? { oficio } : {}),
+    ...(nombre
+      ? {
+          usuario: {
+            OR: [
+              { nombre: { contains: nombre, mode: "insensitive" } },
+              { email: { contains: nombre, mode: "insensitive" } },
+            ],
+          },
+        }
+      : {}),
+  };
+
   return prisma.tecnico.findMany({
-    where: estado ? { estadoVerificacion: estado } : undefined,
-    orderBy: [{ documentosEnviadosAt: "asc" }, { createdAt: "asc" }],
+    where,
+    orderBy: ORDEN_TECNICOS[orden] ?? ORDEN_TECNICOS.recientes,
     select: TECNICO_SELECT,
   });
 }

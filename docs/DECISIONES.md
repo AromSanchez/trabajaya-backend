@@ -253,4 +253,13 @@
 - **Semanas UTC:** helper `inicioSemanaUTC` fija el lunes 00:00 UTC y `serieSemanas(n)` genera las n semanas hasta la actual; el reparto por semana es O(items × semanas).
 - **Zod:** `dashboardSchema` valida la query con `z.coerce.number().int().default(...)` y topes; sin parámetros, aplican los defaults. Códigos fuera de rango → `400 Datos inválidos`.
 
+### Filtros y orden del listado de técnicos del admin (T16)
+- **Se amplía `GET /admin/tecnicos`** (mismo shape de respuesta). Nuevos query params: `nombre`, `oficio` y `orden`, además del `estado` que ya existía. Todos combinables.
+- **Búsqueda `nombre`:** texto libre (máx. 100), case-insensitive, contra **nombre o correo** del usuario (`OR` con `contains`). Un `nombre` vacío se rechaza (`400`).
+- **`oficio`:** enum de los 5 oficios; un valor fuera del catálogo → `400`.
+- **`orden`:** `recientes` (default, `createdAt` desc), `antiguos`, `experiencia` (`aniosExperiencia` desc, nulls al final), `servicios` (`serviciosCompletados` desc), `calificacion` (`calificacionPromedio` desc, nulls al final) y `nombre` (A–Z). Se agrega `id` como desempate para un orden estable. Valor inválido → `400`.
+- **Cambio de orden por defecto:** antes era `documentosEnviadosAt` asc; ahora es `recientes` (`createdAt` desc). La cola de revisión "más antiguos primero" vive ahora en `GET /admin/metricas/dashboard` (`colaRevision`).
+- **`TECNICO_SELECT` aditivo:** se agregan `calificacionPromedio`, `totalResenas` y `serviciosCompletados` a la respuesta de los endpoints admin de técnicos (útil para mostrar junto al orden).
+- **Sin migración.**
+
 

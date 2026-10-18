@@ -11,6 +11,17 @@ const ESTADOS_VERIFICACION = [
 
 const ESTADOS_DOCUMENTO = ["aprobado", "observado"];
 
+const OFICIOS = ["gasfiteria", "electricidad", "carpinteria", "albanileria", "pintura"];
+
+const ORDENES_TECNICOS = [
+  "recientes",
+  "antiguos",
+  "experiencia",
+  "servicios",
+  "calificacion",
+  "nombre",
+];
+
 const idPositivo = z.coerce
   .number("Id inválido")
   .int("Id inválido")
@@ -19,6 +30,14 @@ const idPositivo = z.coerce
 const listarTecnicosSchema = z.object({
   query: z.object({
     estado: z.enum(ESTADOS_VERIFICACION, { message: "Estado inválido" }).optional(),
+    oficio: z.enum(OFICIOS, { message: "Oficio inválido" }).optional(),
+    nombre: z
+      .string()
+      .trim()
+      .min(1, "La búsqueda no puede estar vacía")
+      .max(100, "La búsqueda es demasiado larga")
+      .optional(),
+    orden: z.enum(ORDENES_TECNICOS, { message: "Orden inválido" }).default("recientes"),
   }),
 });
 
@@ -81,4 +100,6 @@ module.exports = {
   motivoSchema,
   ocultarResenaSchema,
   ESTADOS_VERIFICACION,
+  OFICIOS,
+  ORDENES_TECNICOS,
 };

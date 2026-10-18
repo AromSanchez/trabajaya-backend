@@ -47,13 +47,20 @@ Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `de
 Estado: listo
 
 ### GET /admin/tecnicos
-Lista los técnicos, opcionalmente filtrados por estado de verificación. Todos los endpoints de esta sección requieren rol `admin`.
+Lista los técnicos con búsqueda, filtros y orden. Todos los endpoints de esta sección requieren rol `admin`.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
-Query: `estado` (opcional) ∈ `pendiente` | `en_revision` | `verificado` | `observado` | `rechazado` | `suspendido`
-Ejemplo: `GET /admin/tecnicos?estado=en_revision`
+Query (opcional):
+- `estado` ∈ `pendiente` | `en_revision` | `verificado` | `observado` | `rechazado` | `suspendido`
+- `oficio` ∈ `gasfiteria` | `electricidad` | `carpinteria` | `albanileria` | `pintura`
+- `nombre` — texto libre (máx. 100), busca en **nombre o correo** del técnico (case-insensitive)
+- `orden` ∈ `recientes` (default) | `antiguos` | `experiencia` | `servicios` | `calificacion` | `nombre`
+  - `recientes`/`antiguos`: por fecha de registro · `experiencia`: más años primero · `servicios`: más servicios completados · `calificacion`: mejor promedio · `nombre`: A–Z
+
+Todos los filtros son combinables.
+Ejemplos: `GET /admin/tecnicos?estado=en_revision&orden=antiguos` · `GET /admin/tecnicos?oficio=electricidad&nombre=juan`
 Respuesta 200:
-{ "data": { "tecnicos": [ { "id": 8, "estadoVerificacion": "en_revision", "oficio": "electricidad", "descripcion": null, "aniosExperiencia": 8, "distritos": ["trujillo"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "documentosEnviadosAt": "2026-10-11T05:29:38.087Z", "createdAt": "2026-10-11T05:29:36.131Z", "usuario": { "id": 16, "email": "mario@mail.com", "nombre": "Mario Gómez" } } ] } }
-Errores: 400 estado inválido · 401 no autenticado / token inválido · 403 no eres admin
+{ "data": { "tecnicos": [ { "id": 8, "estadoVerificacion": "en_revision", "oficio": "electricidad", "descripcion": null, "aniosExperiencia": 8, "distritos": ["trujillo"], "disponibilidad": [ { "dia": "lunes", "desde": "08:00", "hasta": "18:00" } ], "calificacionPromedio": null, "totalResenas": 0, "serviciosCompletados": 0, "documentosEnviadosAt": "2026-10-11T05:29:38.087Z", "createdAt": "2026-10-11T05:29:36.131Z", "usuario": { "id": 16, "email": "mario@mail.com", "nombre": "Mario Gómez" } } ] } }
+Errores: 400 estado/oficio/orden/búsqueda inválidos · 401 no autenticado / token inválido · 403 no eres admin
 Estado: listo
 
 ### GET /admin/tecnicos/:id
