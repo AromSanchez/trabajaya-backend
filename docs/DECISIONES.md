@@ -223,7 +223,7 @@
 ### Despliegue en Render (T14)
 - **Hosting:** el backend se despliega en Render como **Web Service** (Node) con la base PostgreSQL gestionada de Render. Conexión por la **Internal Database URL** en `DATABASE_URL`.
 - **CORS abierto:** `app.use(cors())` permite **todos los orígenes** (las tres apps: cliente Flutter, técnico Flutter y web admin), sin restringir por lista.
-- **Migraciones en el deploy:** como el repo ya tiene `prisma/migrations/`, la BD (aunque arranque vacía) se sincroniza con `npx prisma migrate deploy` en el **Pre-Deploy Command**, no con `db push`.
+- **Migraciones en el deploy:** como el repo ya tiene `prisma/migrations/`, la BD (aunque arranque vacía) se sincroniza con `npx prisma migrate deploy` dentro del **Build Command** (`npm ci && npx prisma generate && npx prisma migrate deploy`), porque Render ya no ofrece Pre-Deploy Command ni Shell. `prisma migrate deploy` es idempotente.
 - **Seed de producción mínimo:** para el despliegue se usa `npm run seed:clientes` (solo admin + clientes de prueba), **sin técnicos** y **sin Cloudinary**; se ejecuta una sola vez contra la BD de Render.
 
 ### Favoritos y notificaciones (T12)

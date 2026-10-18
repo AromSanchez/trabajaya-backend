@@ -139,8 +139,7 @@
 - **Seed solo admin + clientes:** `prisma/seed-clientes.js` (script `npm run seed:clientes`). Crea el admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NOMBRE`, por defecto `admin@trabajaya.com` / `341600`) y los 4 clientes del demo (`arom@gmail.com`, `carlos@gmail.com`, `alan@gmail.com`, `mauricio@gmail.com`, password `123456`), todos con `upsert` idempotente. No crea técnicos ni sube nada a Cloudinary. También asegura `Configuracion.comision_porcentaje = "0"`.
 - **CORS y puerto:** `src/index.js` ya usa `app.use(cors())` (permite todos los orígenes) y `const PORT = process.env.PORT || 3000`. No se requirió cambio de código.
 - **BD de Render:** está vacía (sin tablas) pero el repo **sí** tiene migraciones (`prisma/migrations/`), así que se sincroniza con `npx prisma migrate deploy` (no `db push`).
-- **Build Command:** `npm ci && npx prisma generate`.
-- **Pre-Deploy Command:** `npx prisma migrate deploy`.
+- **Build Command:** `npm ci && npx prisma generate && npx prisma migrate deploy`.
 - **Start Command:** `npm start`.
 - **Seed:** ejecutar `npm run seed:clientes` una sola vez contra la BD de Render tras el primer deploy.
 
