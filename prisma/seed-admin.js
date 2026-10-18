@@ -5,7 +5,7 @@ const prisma = require("../src/config/prisma");
 const SALT_ROUNDS = 10;
 
 async function main() {
-  const email = (process.env.ADMIN_EMAIL || "admin@trabajoya.com").toLowerCase();
+  const email = (process.env.ADMIN_EMAIL || "admin@trabajaya.com").toLowerCase();
   const password = process.env.ADMIN_PASSWORD || "123456";
   const nombre = process.env.ADMIN_NOMBRE || "Administrador";
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);

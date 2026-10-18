@@ -4,15 +4,15 @@ const prisma = require("../src/config/prisma");
 
 const SALT_ROUNDS = 10;
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@trabajoya.com").toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@trabajaya.com").toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "341600";
 const ADMIN_NOMBRE = process.env.ADMIN_NOMBRE || "Administrador";
 
 const CLIENTES = [
-  { nombre: "Arom Sanchez", email: "arom.sanchez@trabajoya.com", password: "123456" },
-  { nombre: "Carlos Caceres", email: "carlos.caceres@trabajoya.com", password: "123456" },
-  { nombre: "Alan Roncal", email: "alan.roncal@trabajoya.com", password: "123456" },
-  { nombre: "Mauricio Amando", email: "mauricio.amando@trabajoya.com", password: "123456" },
+  { nombre: "Arom Sanchez", email: "arom@gmail.com", password: "123456" },
+  { nombre: "Carlos Caceres", email: "carlos@gmail.com", password: "123456" },
+  { nombre: "Alan Roncal", email: "alan@gmail.com", password: "123456" },
+  { nombre: "Mauricio Amando", email: "mauricio@gmail.com", password: "123456" },
 ];
 
 async function asegurarAdmin() {
