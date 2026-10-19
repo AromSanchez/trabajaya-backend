@@ -43,7 +43,7 @@ Respuesta 200:
   "colaRevision": { "tecnicos": [ { "id": 2, "nombre": "Edwin Iglesias", "oficio": "electricidad", "distrito": "trujillo", "diasEsperando": 4, "estadoDocumentos": "faltan", "faltantes": ["cul", "certificado_oficio"], "documentosEnviadosAt": "2026-10-14T05:22:39.434Z" } ] }
 } }
 Errores: 400 paginación o periodos inválidos · 401 no autenticado / token inválido · 403 no eres admin
-Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `dentroDeMeta`. `vsSemanaPasada` compara altas de los últimos 7 días contra los 7 anteriores. El tiempo de verificación solo cuenta técnicos **ya decididos** (registro → primera decisión del admin hacia `verificado`/`observado`/`rechazado`). Si no hay datos suficientes, `vsMesPasadoPorcentaje` y `promedioHoras` pueden ser `null`.
+Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `dentroDeMeta`. `vsSemanaPasada` compara altas de los últimos 7 días contra los 7 anteriores. El tiempo de verificación solo cuenta técnicos **ya decididos** (registro → primera decisión del admin hacia `verificado`/`observado`/`rechazado`). `registrosVerificaciones.serie[].verificados` y `tarjetas.verificados.nuevosSemana` cuentan por `Tecnico.verificadoAt` (fecha en que el admin lo pasó a `verificado`, también al reactivar), por lo que son coherentes con `tecnicosPorEstado.verificado`: un técnico primero observado y luego aprobado cuenta en la semana en que se aprobó. Si no hay datos suficientes, `vsMesPasadoPorcentaje` y `promedioHoras` pueden ser `null`.
 Estado: listo
 
 ### GET /admin/tecnicos

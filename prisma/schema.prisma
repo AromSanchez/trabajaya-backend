@@ -145,6 +145,7 @@ model Tecnico {
   usuario             Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   estadoVerificacion  EstadoVerificacion     @default(pendiente)
   documentosEnviadosAt DateTime?
+  verificadoAt        DateTime?
   oficio              Oficio?
   descripcion         String?
   aniosExperiencia    Int?

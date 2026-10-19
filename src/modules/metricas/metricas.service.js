@@ -117,6 +117,7 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
     revisionParaPrioridad,
     colaRaw,
     tecnicosFechas,
+    tecnicosVerificados,
     cancelaciones,
     decisiones,
   ] = await Promise.all([
@@ -163,6 +164,10 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
       where: { createdAt: { gte: semanasRegistros[0].inicio } },
       select: { createdAt: true },
     }),
+    prisma.tecnico.findMany({
+      where: { verificadoAt: { gte: semanasRegistros[0].inicio } },
+      select: { verificadoAt: true },
+    }),
     prisma.servicio.findMany({
       where: { cancelacionTardia: true, canceladoAt: { gte: semanasCancelaciones[0].inicio } },
       select: { canceladoAt: true },
@@ -176,8 +181,8 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
     return Math.max(max, dias);
   }, 0);
 
-  const verificadosNuevos7 = decisiones.filter(
-    (d) => d.estadoNuevo === "verificado" && d.createdAt >= hace7,
+  const verificadosNuevos7 = tecnicosVerificados.filter(
+    (t) => t.verificadoAt >= hace7,
   ).length;
 
   const conteoEstado = new Map(porEstado.map((fila) => [fila.estadoVerificacion, fila._count._all]));
@@ -212,11 +217,10 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
   };
 
   const conteosRegistros = repartirPorSemana(tecnicosFechas, semanasRegistros, (t) => t.createdAt);
-  const decisionesVerificado = decisiones.filter((d) => d.estadoNuevo === "verificado");
   const conteosVerificados = repartirPorSemana(
-    decisionesVerificado,
+    tecnicosVerificados,
     semanasRegistros,
-    (d) => d.createdAt,
+    (t) => t.verificadoAt,
   );
   const registrosVerificaciones = {
     semanas: semanas_registros,

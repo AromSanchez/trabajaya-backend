@@ -83,6 +83,7 @@ Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Aut
 - [x] **T14 — Despliegue en Render:** seed `prisma/seed-clientes.js` (script `npm run seed:clientes`) que crea **solo admin + los 4 clientes de prueba**, sin técnicos ni Cloudinary; el `index.js` ya usa `cors()` (todos los orígenes) y `process.env.PORT`. La BD de Render arranca vacía y se sincroniza con `prisma migrate deploy`. *(2026-10-17)*
 - [x] **T15 — Métricas y gráficos del panel admin:** módulo `src/modules/metricas/` con un único `GET /admin/metricas/dashboard` (rol `admin`) que devuelve tarjetas, prioridad del día, series semanales, distribuciones, reportes por motivo, cancelaciones tardías, tiempo de verificación y cola de revisión. Sin migración. *(2026-10-18)*
 - [x] **T16 — Filtros y orden en el listado de técnicos del admin:** `GET /admin/tecnicos` suma búsqueda por `nombre` (nombre o correo), filtro `oficio` y `orden` (`recientes`, `antiguos`, `experiencia`, `servicios`, `calificacion`, `nombre`). Sin migración. *(2026-10-18)*
+- [x] **T17 — Fix: verificaciones en las métricas del admin:** campo `Tecnico.verificadoAt` (migración `20261019120000_tecnico_verificado_at`, con backfill desde el historial) que se setea al aprobar/reactivar; `registrosVerificaciones.serie[].verificados` y `verificados.nuevosSemana` cuentan por esa fecha y ya son coherentes con `tecnicosPorEstado`. *(2026-10-19)*
 
 ## Notas y decisiones
 ### T0
@@ -212,6 +213,14 @@ Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Aut
 - **`estado`** se mantiene igual. Todos los filtros son combinables.
 - **`TECNICO_SELECT`** ahora incluye `calificacionPromedio`, `totalResenas` y `serviciosCompletados` (aditivo) para que el frontend pueda mostrarlos junto al orden.
 - **Sin migración** (no hay cambios de esquema).
+
+### T13 — Datos de prueba (en curso)
+- **Seed de técnicos:** `prisma/seed-tecnicos.js` + script `npm run seed:tecnicos`. Crea **solo técnicos** (usuario + perfil + documentos), idempotente (`upsert` por email); no crea clientes, servicios, reseñas ni reportes.
+- **16 técnicos** con oficio único (electricidad 4, pintura 5, carpintería 3, albañilería 2, gasfitería 2), todos con **distrito `trujillo`**, `disponible: true` y `aniosExperiencia` de 3 a 15.
+- **Email `nombre.oficio@trabajoya.com`** (primer nombre sin tildes + oficio; p. ej. `jair.electricidad@trabajoya.com`, `javier.pintura@trabajoya.com`, `javier.albanileria@trabajoya.com`). Contraseña **`123456`** para todos (bcrypt).
+- **Documentos:** sube `prisma/dni-prueba.jpg` a Cloudinary (privado) y crea `dni_frente`, `dni_reverso` y `selfie` por técnico; un mismo archivo por técnico compartido por sus 3 documentos. `estadoVerificacion: en_revision` y `documentosEnviadosAt` seteado.
+- **Ejecución contra Render:** se corrió `npm run seed:tecnicos` local con `DATABASE_URL` de la BD de Render (el env var sobreescribe el `.env`). Verificado: 16 usuarios técnico + 16 perfiles `en_revision` + 48 documentos (3 por técnico), 16 assets de Cloudinary encontrados y las 16 contraseñas correctas. La BD de Render ya traía admin + 4 clientes + 1 técnico `trabajador@trabajaya.com` (6 documentos), que no se tocaron.
+- **Pendiente T13:** resto de datos demo (clientes, servicios, reseñas, reportes) y `prisma/seed-demo.js` (existente, sin usar aún en Render).
 
 ## Verificaciones realizadas (T1, T2, T4, T5, T6, T7, T8, T9, T10, T11, T12, T15 y T16)
 - `npx prisma migrate dev --name init` → migración `20261011025046_init` creada y aplicada; "your database is now in sync".

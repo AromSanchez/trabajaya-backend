@@ -172,9 +172,14 @@ async function registrarCambioEstado(adminId, tecnico, estadoNuevo, comentario, 
       },
     });
 
+    const datosTecnico = { estadoVerificacion: estadoNuevo };
+    if (estadoNuevo === "verificado") {
+      datosTecnico.verificadoAt = new Date();
+    }
+
     return tx.tecnico.update({
       where: { id: tecnico.id },
-      data: { estadoVerificacion: estadoNuevo },
+      data: datosTecnico,
       select: TECNICO_SELECT,
     });
   });

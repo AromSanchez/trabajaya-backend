@@ -137,10 +137,18 @@
 - **Un solo endpoint para todo el panel:** `GET /admin/metricas/dashboard` devuelve en una sola llamada las tarjetas, series y distribuciones. El frontend arma los gráficos; el cálculo siempre es del backend.
 - **Sin metas por ahora:** todavía no se definen la meta semanal de verificaciones ni la meta de tiempo (48 h), así que **no** se devuelven `meta` ni indicadores de cumplimiento, y **no** se crean claves en `Configuracion`. El panel muestra valores absolutos y tendencias.
 - **Tiempo de verificación:** promedio desde `Tecnico.createdAt` (registro) hasta la **primera decisión** del admin (`HistorialVerificacion` con `estadoNuevo` ∈ `verificado`/`observado`/`rechazado`). Solo cuentan técnicos **ya decididos**; los que siguen `pendiente`/`en_revision` no entran. La comparación es último bloque de 30 días vs. los 30 anteriores.
+- **Serie de verificados por `verificadoAt`:** al aprobar o reactivar a un técnico se guarda `Tecnico.verificadoAt`. La serie semanal de verificados y `tarjetas.verificados.nuevosSemana` cuentan por esa fecha, no por la primera decisión del historial (un técnico `observado` y luego `verificado` ahora sí cuenta en la semana en que se aprobó). Así queda coherente con `tecnicosPorEstado.verificado`. El **tiempo medio** de verificación sigue usando la primera decisión del historial.
 - **Técnicos por oficio:** se agrupa por el enum `Oficio` (5 valores reales). El mockup con "Cerrajería/Otros oficios" no aplica al catálogo actual.
 - **"En revisión" (tendencia):** se compara el número de técnicos que enviaron a revisión (`documentosEnviadosAt`) en los últimos 7 días contra los 7 anteriores. **Reportes abiertos** compara reportes creados últimos 7 días vs. 7 anteriores; `masDe48h` cuenta reportes `pendiente` con más de 48 h.
 - **Cola de revisión:** técnicos `en_revision` ordenados por envío más antiguo primero, con días de espera y documentos faltantes (sobre los 5 tipos; en `en_revision` los 3 obligatorios ya están).
 - **Series semanales:** desde el lunes (UTC). `registrosVerificaciones` usa los registros (`Tecnico.createdAt`) y las verificaciones (primeras decisiones hacia `verificado`) por semana; `cancelacionesTardiasSemanales` usa `Servicio.cancelacionTardia` agrupado por `canceladoAt`. Los periodos son por query con topes.
+
+### Datos de prueba (T13)
+- **Seed de técnicos separado:** `prisma/seed-tecnicos.js` (`npm run seed:tecnicos`) crea **solo técnicos + sus documentos**; no mezcla clientes, servicios, reseñas ni reportes. Es idempotente por email y borra/re-sube los documentos previos del técnico.
+- **Email de prueba = `nombre.oficio@trabajoya.com`:** primer nombre (sin tildes) + oficio, para evitar choques cuando hay nombres repetidos (p. ej. `javier.pintura` y `javier.albanileria`). Contraseña `123456`.
+- **Todos nacen `en_revision`:** los documentos (`dni_frente`, `dni_reverso`, `selfie`) se suben privados a Cloudinary con la misma imagen de prueba, y el técnico queda a la espera de que el admin lo apruebe. No se crea `HistorialVerificacion` (esa la genera una acción del admin).
+- **Albañilería y gasfitería 2 y 2:** como cada técnico tiene un solo oficio, los cuatro nombres de "Albañilería y Gasfitería" se reparten en 2 de cada uno.
+- **Ejecución local contra Render:** se usa `DATABASE_URL` de Render como variable de entorno del proceso, que tiene prioridad sobre el `.env` (dotenv no sobreescribe variables ya definidas). Cloudinary sí se toma del `.env`.
 
 ## Técnicas
 
