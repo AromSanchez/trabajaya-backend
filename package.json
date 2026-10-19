@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "seed:admin": "node prisma/seed-admin.js",
     "seed:clientes": "node prisma/seed-clientes.js",
+    "seed:tecnicos": "node prisma/seed-tecnicos.js",
     "seed:demo": "node prisma/seed-demo.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
