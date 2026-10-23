@@ -135,7 +135,59 @@ async function listarTransaccionesMonetizacion({ tecnicoId, tipoTransaccion, des
   };
 }
 
+const TIPOS_INGRESO = ["compra_creditos", "activacion_plan", "cambio_modelo", "comision_servicio"];
+
+async function resumenMonetizacion() {
+  const ahora = new Date();
+  const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+
+  const [
+    totalTecnicos,
+    conModelo,
+    conCreditos,
+    conMensualidad,
+    planesActivos,
+    creditosAgg,
+    ingresosMesAgg,
+    ingresosTotalesAgg,
+    totalTransacciones,
+    transaccionesMes,
+  ] = await prisma.$transaction([
+    prisma.tecnico.count(),
+    prisma.monetizacionTecnico.count({ where: { tipo: { not: null } } }),
+    prisma.monetizacionTecnico.count({ where: { tipo: "creditos" } }),
+    prisma.monetizacionTecnico.count({ where: { tipo: "mensualidad" } }),
+    prisma.monetizacionTecnico.count({ where: { tipo: "mensualidad", planVenceAt: { gt: ahora } } }),
+    prisma.monetizacionTecnico.aggregate({ _sum: { creditosRestantes: true }, where: { tipo: "creditos" } }),
+    prisma.transaccionMonetizacion.aggregate({ _sum: { monto: true }, where: { createdAt: { gte: inicioMes }, tipo: { in: TIPOS_INGRESO } } }),
+    prisma.transaccionMonetizacion.aggregate({ _sum: { monto: true }, where: { tipo: { in: TIPOS_INGRESO } } }),
+    prisma.transaccionMonetizacion.count(),
+    prisma.transaccionMonetizacion.count({ where: { createdAt: { gte: inicioMes } } }),
+  ]);
+
+  return {
+    tecnicos: {
+      total: totalTecnicos,
+      conModelo,
+      creditos: conCreditos,
+      mensualidad: conMensualidad,
+    },
+    planesActivos,
+    creditosEnCirculacion: creditosAgg._sum.creditosRestantes ?? 0,
+    ingresos: {
+      mes: Number(ingresosMesAgg._sum.monto ?? 0),
+      total: Number(ingresosTotalesAgg._sum.monto ?? 0),
+    },
+    transacciones: {
+      total: totalTransacciones,
+      mes: transaccionesMes,
+    },
+    generadoAt: ahora.toISOString(),
+  };
+}
+
 module.exports = {
   listarTecnicosMonetizacion,
   listarTransaccionesMonetizacion,
+  resumenMonetizacion,
 };

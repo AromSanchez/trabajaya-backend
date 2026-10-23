@@ -182,6 +182,15 @@ Estado: listo
 
 Nota (sin endpoint propio): el admin puede ver el detalle de un servicio con `GET /servicios/:id` (incluye `montoAcordado`, `alcanceAcordado` y `propuestas`), pero **no** tiene acceso a las conversaciones del chat (`GET/POST /chat/servicios/:id/mensajes` responden `403` para el rol `admin`); el chat es privado entre cliente y técnico.
 
+### GET /admin/monetizacion/resumen
+KPIs de monetización para las tarjetas del panel: técnicos con modelo, planes activos, créditos en circulación e ingresos.
+"Ingresa" cuenta los montos de `compra_creditos`, `activacion_plan`, `cambio_modelo` y `comision_servicio` (los pagos son simulados).
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Respuesta 200:
+{ "data": { "tecnicos": { "total": 17, "conModelo": 5, "creditos": 3, "mensualidad": 2 }, "planesActivos": 2, "creditosEnCirculacion": 59, "ingresos": { "mes": 290, "total": 480 }, "transacciones": { "total": 20, "mes": 15 }, "generadoAt": "2026-10-23T05:00:00.000Z" } }
+Errores: 401 no autenticado / token inválido · 403 no eres admin
+Estado: listo
+
 ### GET /admin/monetizacion/tecnicos
 Lista los técnicos con su modelo de monetización activo, créditos restantes y fecha de vencimiento del plan.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)

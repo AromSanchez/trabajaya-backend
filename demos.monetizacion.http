@@ -1,0 +1,32 @@
+### Login admin
+# @name login
+POST http://localhost:3000/auth/admin/login
+Content-Type: application/json
+
+{
+  "email": "admin@trabajaya.com",
+  "password": "123456"
+}
+
+### Copia el token del login en la variable de abajo (o usa @token dinámico de tu cliente REST)
+@token = {{login.response.body.$.token}}
+
+### GET /admin/monetizacion/resumen — KPIs
+GET http://localhost:3000/admin/monetizacion/resumen
+Authorization: Bearer {{token}}
+
+### GET /admin/monetizacion/tecnicos
+GET http://localhost:3000/admin/monetizacion/tecnicos?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### GET /admin/monetizacion/tecnicos?tipo=creditos
+GET http://localhost:3000/admin/monetizacion/tecnicos?tipo=creditos&orden=creditos
+Authorization: Bearer {{token}}
+
+### GET /admin/monetizacion/transacciones
+GET http://localhost:3000/admin/monetizacion/transacciones?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### GET /admin/monetizacion/transacciones?tipoTransaccion=activacion_plan
+GET http://localhost:3000/admin/monetizacion/transacciones?tipoTransaccion=activacion_plan
+Authorization: Bearer {{token}}

@@ -12,6 +12,12 @@ const router = Router();
 const soloAdmin = [autenticar, autorizar("admin")];
 
 router.get(
+  "/resumen",
+  ...soloAdmin,
+  controller.resumenMonetizacion
+);
+
+router.get(
   "/tecnicos",
   ...soloAdmin,
   validate(listarTecnicosMonetizacionSchema),

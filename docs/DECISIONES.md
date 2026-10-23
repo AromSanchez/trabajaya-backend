@@ -1,4 +1,4 @@
-# DECISIONES — Backend de Trabajo Ya
+﻿# DECISIONES — Backend de Trabajo Ya
 
 > Registro de decisiones de negocio y de arquitectura del proyecto.
 > Cada decisión se anota aquí **en la misma tarea en que se toma** (ver AGENTS.md, Reglas de trabajo).
@@ -271,3 +271,8 @@
 - **Sin migración.**
 
 
+
+### Resumen de monetización (T18.13)
+- **Endpoint `GET /admin/monetizacion/resumen`:** devuelve KPIs para el panel (sin paginación). "Ingresos" suma los montos de `compra_creditos`, `activacion_plan`, `cambio_modelo` y `comision_servicio` (todo pago simulado); `mes` acota con el inicio del mes actual (hora local del servidor) y `total` es histórico.
+- `planesActivos` cuenta mensualidades con `planVenceAt > ahora` (no basta `tipo: mensualidad`); `creditosEnCirculacion` es la suma de `creditosRestantes` donde `tipo: creditos`.
+- **Panel frontend** (repo `trabajaya-admin`): sección de solo lectura; las referencias se traducen en el cliente (`paq_N` → «Paquete N créditos», `plan_mensual` → «Plan mensual»). En el panel los montos positivos se muestran en verde y los descuentos de créditos (negativos) en rojo. `api.ts` ahora respeta `VITE_API_URL` (dev → backend local) para probar endpoints nuevos sin desplegar.
