@@ -7,6 +7,7 @@ const {
   CARPETA_SERVICIOS,
 } = require("../../config/cloudinary");
 const { crearYemitir } = require("../notificaciones/notificaciones.service");
+const { obtenerConfiguracion, obtenerMonetizacion } = require("../monetizacion/monetizacion.service");
 
 const HORAS_EXPIRACION = 24;
 const HORAS_CANCELACION_TARDIA = 2;
@@ -360,6 +361,23 @@ async function aceptar(usuarioId, id) {
     throw new ApiError(409, "La solicitud ya no está pendiente");
   }
 
+  const config = await obtenerConfiguracion();
+  const monetizacion = await obtenerMonetizacion(usuarioId);
+
+  if (!monetizacion.tipo) {
+    throw new ApiError(409, "No tienes modelo de monetización activo. Elige uno en tu perfil.");
+  }
+
+  if (monetizacion.tipo === "creditos") {
+    if ((monetizacion.creditosRestantes || 0) < config.costoPorSolicitud) {
+      throw new ApiError(409, "Sin créditos suficientes. Recarga tu paquete.");
+    }
+  } else if (monetizacion.tipo === "mensualidad") {
+    if (monetizacion.planVenceAt && new Date(monetizacion.planVenceAt) < new Date()) {
+      throw new ApiError(409, "Plan mensual vencido. Renueva tu plan.");
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.historialServicio.create({
       data: {
@@ -374,6 +392,24 @@ async function aceptar(usuarioId, id) {
       where: { id: servicio.id },
       data: { estado: "aceptado", aceptadoAt: new Date() },
     });
+
+    if (monetizacion.tipo === "creditos") {
+      await tx.monetizacionTecnico.update({
+        where: { tecnicoId },
+        data: { creditosRestantes: { decrement: config.costoPorSolicitud } },
+      });
+      const m = await tx.monetizacionTecnico.findUnique({ where: { tecnicoId }, select: { id: true } });
+      await tx.transaccionMonetizacion.create({
+        data: {
+          tecnicoId,
+          monetizacionId: m.id,
+          tipo: "descuento_credito",
+          creditos: -config.costoPorSolicitud,
+          descripcion: `Descuento de ${config.costoPorSolicitud} crédito por aceptar solicitud`,
+          referenciaId: String(servicio.id),
+        },
+      });
+    }
   });
 
   const serializado = serializar(await obtenerServicioPorId(servicio.id), "tecnico");
@@ -467,6 +503,35 @@ async function completar(usuario, id) {
       where: { id: servicio.tecnicoId },
       data: { serviciosCompletados: { increment: 1 } },
     });
+
+    if (servicio.montoAcordado && usuario.rol === "tecnico" || usuario.rol === "cliente") {
+      const config = await obtenerConfiguracion();
+      const tecnico = await tx.tecnico.findUnique({
+        where: { id: servicio.tecnicoId },
+        select: { usuarioId: true },
+      });
+      if (tecnico) {
+        const monetizacion = await tx.monetizacionTecnico.findUnique({
+          where: { tecnicoId: tecnico.id },
+          select: { id: true, tipo: true, planVenceAt: true },
+        });
+        if (monetizacion?.tipo === "mensualidad" && monetizacion.planVenceAt && new Date(monetizacion.planVenceAt) >= new Date()) {
+          const montoComision = Math.round(Number(servicio.montoAcordado) * config.planComisionPorcentaje / 100 * 100) / 100;
+          if (montoComision > 0) {
+            await tx.transaccionMonetizacion.create({
+              data: {
+                tecnicoId: tecnico.id,
+                monetizacionId: monetizacion.id,
+                tipo: "comision_servicio",
+                monto: montoComision,
+                descripcion: `Comisión ${config.planComisionPorcentaje}% por servicio completado`,
+                referenciaId: String(servicio.id),
+              },
+            });
+          }
+        }
+      }
+    }
   });
 
   const serializado = serializar(await obtenerServicioPorId(servicio.id), usuario.rol);

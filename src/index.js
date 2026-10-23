@@ -13,6 +13,7 @@ const resenasRoutes = require("./modules/resenas/resenas.routes");
 const reportesRoutes = require("./modules/reportes/reportes.routes");
 const favoritosRoutes = require("./modules/favoritos/favoritos.routes");
 const notificacionesRoutes = require("./modules/notificaciones/notificaciones.routes");
+const monetizacionRoutes = require("./modules/monetizacion/monetizacion.routes");
 const { inicializarSocket } = require("./config/socket");
 const { notFound, errorHandler } = require("./middlewares/errorHandler");
 
@@ -27,6 +28,7 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/tecnicos", tecnicosRoutes);
+app.use("/tecnicos/monetizacion", monetizacionRoutes);
 app.use("/admin/metricas", metricasRoutes);
 app.use("/admin", adminRoutes);
 app.use("/oficios", oficiosRoutes);

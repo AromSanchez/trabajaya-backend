@@ -140,29 +140,31 @@ model Usuario {
 }
 
 model Tecnico {
-  id                  Int                    @id @default(autoincrement())
-  usuarioId           Int                    @unique
-  usuario             Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  estadoVerificacion  EstadoVerificacion     @default(pendiente)
+  id                   Int                      @id @default(autoincrement())
+  usuarioId            Int                      @unique
+  usuario              Usuario                  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  estadoVerificacion   EstadoVerificacion       @default(pendiente)
   documentosEnviadosAt DateTime?
-  verificadoAt        DateTime?
-  oficio              Oficio?
-  descripcion         String?
-  aniosExperiencia    Int?
-  distritos           Distrito[]
-  disponibilidad      Json?
-  especialidades      String[]                @default([])
-  disponible          Boolean                 @default(false)
-  documentos          DocumentoVerificacion[]
-  historial           HistorialVerificacion[]
-  servicios           Servicio[]
-  resenas             Resena[]
+  verificadoAt         DateTime?
+  oficio               Oficio?
+  descripcion          String?
+  aniosExperiencia     Int?
+  distritos            Distrito[]
+  disponibilidad       Json?
+  especialidades       String[]                  @default([])
+  disponible           Boolean                   @default(false)
+  documentos           DocumentoVerificacion[]
+  historial            HistorialVerificacion[]
+  servicios            Servicio[]
+  resenas              Resena[]
   calificacionPromedio Float?
-  totalResenas        Int                     @default(0)
-  serviciosCompletados Int                    @default(0)
-  favoritos           Favorito[]
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
+  totalResenas         Int                       @default(0)
+  serviciosCompletados Int                       @default(0)
+  favoritos            Favorito[]
+  monetizacion         MonetizacionTecnico?
+  transacciones        TransaccionMonetizacion[]
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 }
 
 enum TipoDocumentoVerificacion {
@@ -386,4 +388,50 @@ model Notificacion {
 
   @@index([usuarioId, leida])
   @@index([usuarioId, createdAt])
+}
+
+enum TipoMonetizacion {
+  creditos
+  mensualidad
+}
+
+enum TipoTransaccion {
+  compra_creditos
+  activacion_plan
+  descuento_credito
+  comision_servicio
+  cambio_modelo
+}
+
+model MonetizacionTecnico {
+  id               Int               @id @default(autoincrement())
+  tecnicoId        Int               @unique
+  tecnico          Tecnico           @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  tipo             TipoMonetizacion?
+  creditosRestantes Int              @default(0)
+  planVenceAt      DateTime?
+  paqueteId        String?
+  planId           String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  transacciones    TransaccionMonetizacion[]
+}
+
+model TransaccionMonetizacion {
+  id              Int               @id @default(autoincrement())
+  tecnicoId       Int
+  tecnico         Tecnico           @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  monetizacionId  Int
+  monetizacion    MonetizacionTecnico @relation(fields: [monetizacionId], references: [id], onDelete: Cascade)
+  tipo            TipoTransaccion
+  monto           Decimal?          @db.Decimal(10, 2)
+  creditos        Int?
+  descripcion     String?
+  referenciaId    String?
+  createdAt       DateTime          @default(now())
+
+  @@index([tecnicoId])
+  @@index([monetizacionId])
+  @@index([tipo])
+  @@index([createdAt])
 }

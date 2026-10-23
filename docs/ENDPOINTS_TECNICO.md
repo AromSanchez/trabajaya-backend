@@ -275,3 +275,59 @@ Estado: listo
 `solicitud_nueva`, `solicitud_aceptada`, `solicitud_rechazada`, `servicio_completado`, `servicio_cancelado`, `mensaje_nuevo`, `resena_recibida`, `propuesta_nueva`, `propuesta_aceptada`, `propuesta_rechazada`, `verificacion_aprobada`, `verificacion_observada`, `verificacion_rechazada`, `verificacion_suspendida`, `reporte_resuelto`, `reporte_descartado`.
 
 Notas: las notificaciones nacen **no leídas** y **no se pueden borrar**. El técnico recibe `verificacion_*` cuando el admin aprueba/observa/rechaza/suspende su cuenta. El socket conectado recibe en vivo `notificacion:nueva` (ver sección de Socket.IO).
+
+### GET /tecnicos/monetizacion/modelo
+Devuelve el modelo de monetización activo del técnico autenticado.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Respuesta 200:
+{ "data": { "modelo": { "id": 1, "tipo": "creditos", "creditosRestantes": 10, "planVenceAt": null, "paqueteId": "paq_10", "planId": null } } }
+Si no tiene modelo activo: `"tipo": null` y valores en `null`/`0`.
+Errores: 401 no autenticado / token inválido · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### POST /tecnicos/monetizacion/creditos/comprar
+Compra un paquete de créditos (simulación sin pasarela). Suma los créditos al técnico y registra la transacción.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Body:
+{ "paqueteId": "paq_10" }
+`paqueteId` debe existir en configuración (`creditos_paquetes`): `paq_10` (10 créditos / 50 soles), `paq_20` (20 / 90), `paq_50` (50 / 200).
+Respuesta 200:
+{ "data": { "mensaje": "Créditos acreditados correctamente", "creditosRestantes": 20, "paquete": "10 créditos" } }
+Errores: 400 paquete inválido · 401 no autenticado · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### POST /tecnicos/monetizacion/mensualidad/activar
+Activa el plan mensual (simulación). Setea `planVenceAt = now + 30 días` y registra la transacción.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Body:
+{ "planId": "plan_mensual" }
+Precio: 20 soles (config `plan_mensual_precio`). Duración: 30 días (`plan_mensual_duracion_dias`).
+Respuesta 200:
+{ "data": { "mensaje": "Plan mensual activado correctamente", "planVenceAt": "2026-11-22T03:00:00.000Z", "precio": 20 } }
+Errores: 400 plan inválido · 401 no autenticado · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### POST /tecnicos/monetizacion/cambiar
+Cambia el modelo de monetización del técnico.
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Body (a créditos):
+{ "tipo": "creditos", "paqueteId": "paq_20" }
+Body (a mensualidad):
+{ "tipo": "mensualidad", "planId": "plan_mensual" }
+- Si va a **créditos** y no tiene paquete previo, exige `paqueteId` (compra el paquete y suma créditos).
+- Si va a **mensualidad**, exige `planId` (activa plan, pone créditos en 0).
+- Si vuelve a **créditos** y ya tenía ese modelo, **respeta los créditos restantes** (no se pierden).
+Registra transacción `cambio_modelo`.
+Respuesta 200:
+{ "data": { "mensaje": "Modelo de monetización actualizado correctamente", "tipo": "creditos", "creditosRestantes": 20, "planVenceAt": null } }
+Errores: 400 datos inválidos (falta paqueteId/planId) · 401 no autenticado · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo
+
+### GET /tecnicos/monetizacion/historial
+Lista paginada de transacciones de monetización del técnico (compras, activaciones, descuentos, comisiones, cambios).
+Auth: sí — `Authorization: Bearer <token>` (rol `tecnico`)
+Query (opcional): `tipoTransaccion` ∈ `compra_creditos` | `activacion_plan` | `descuento_credito` | `comision_servicio` | `cambio_modelo` · `desde` (ISO 8601) · `hasta` (ISO 8601) · `page` (default 1) · `limit` (default 20, tope 100)
+Respuesta 200:
+{ "data": { "transacciones": [ { "id": 1, "tipo": "compra_creditos", "monto": "50.00", "creditos": 10, "descripcion": "Compra de paquete \"10 créditos\"", "referenciaId": "paq_10", "createdAt": "2026-10-23T03:06:14.532Z" } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 filtro o paginación inválidos · 401 no autenticado · 403 no eres técnico · 404 perfil no encontrado
+Estado: listo

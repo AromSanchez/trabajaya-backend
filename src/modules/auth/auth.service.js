@@ -72,15 +72,22 @@ async function obtenerPerfil(id) {
 }
 
 async function login({ email, password, rol }) {
+  console.log("DEBUG login:", { email, rol, JWT_SECRET: process.env.JWT_SECRET ? "SET" : "NOT_SET" });
   const usuario = await prisma.usuario.findUnique({
     where: { email: email.toLowerCase() },
   });
+
+  console.log("DEBUG usuario encontrado:", usuario ? "SI" : "NO");
+  if (usuario) {
+    console.log("DEBUG usuario.rol:", usuario.rol, "rol esperado:", rol);
+  }
 
   if (!usuario || usuario.rol !== rol) {
     throw new ApiError(401, "Credenciales incorrectas");
   }
 
   const coincide = await bcrypt.compare(password, usuario.passwordHash);
+  console.log("DEBUG password match:", coincide);
   if (!coincide) {
     throw new ApiError(401, "Credenciales incorrectas");
   }

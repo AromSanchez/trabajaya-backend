@@ -24,7 +24,43 @@ async function main() {
     create: { clave: "comision_porcentaje", valor: "0" },
   });
 
-  console.log("Configuración lista: comision_porcentaje = 0");
+  const paquetesCreditos = JSON.stringify([
+    { id: "paq_10", nombre: "10 créditos", creditos: 10, precio: 50 },
+    { id: "paq_20", nombre: "20 créditos", creditos: 20, precio: 90 },
+    { id: "paq_50", nombre: "50 créditos", creditos: 50, precio: 200 },
+  ]);
+
+  await prisma.configuracion.upsert({
+    where: { clave: "creditos_paquetes" },
+    update: { valor: paquetesCreditos },
+    create: { clave: "creditos_paquetes", valor: paquetesCreditos },
+  });
+
+  await prisma.configuracion.upsert({
+    where: { clave: "creditos_costo_por_solicitud" },
+    update: { valor: "1" },
+    create: { clave: "creditos_costo_por_solicitud", valor: "1" },
+  });
+
+  await prisma.configuracion.upsert({
+    where: { clave: "plan_mensual_precio" },
+    update: { valor: "20" },
+    create: { clave: "plan_mensual_precio", valor: "20" },
+  });
+
+  await prisma.configuracion.upsert({
+    where: { clave: "plan_mensual_comision_porcentaje" },
+    update: { valor: "5" },
+    create: { clave: "plan_mensual_comision_porcentaje", valor: "5" },
+  });
+
+  await prisma.configuracion.upsert({
+    where: { clave: "plan_mensual_duracion_dias" },
+    update: { valor: "30" },
+    create: { clave: "plan_mensual_duracion_dias", valor: "30" },
+  });
+
+  console.log("Configuración lista: comision_porcentaje = 0, paquetes de créditos, costo por solicitud, plan mensual (precio, comisión %, duración)");
 }
 
 main()
