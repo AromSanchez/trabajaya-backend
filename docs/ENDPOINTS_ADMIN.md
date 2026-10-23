@@ -181,3 +181,29 @@ Errores: 400 estado o nota inválidos · 401 no autenticado / token inválido ·
 Estado: listo
 
 Nota (sin endpoint propio): el admin puede ver el detalle de un servicio con `GET /servicios/:id` (incluye `montoAcordado`, `alcanceAcordado` y `propuestas`), pero **no** tiene acceso a las conversaciones del chat (`GET/POST /chat/servicios/:id/mensajes` responden `403` para el rol `admin`); el chat es privado entre cliente y técnico.
+
+### GET /admin/monetizacion/tecnicos
+Lista los técnicos con su modelo de monetización activo, créditos restantes y fecha de vencimiento del plan.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Query (opcional):
+- `tipo` ∈ `creditos` | `mensualidad` — filtra por modelo activo
+- `orden` ∈ `recientes` (default) | `creditos` | `vencimiento`
+  - `recientes`: más recientes primero · `creditos`: más créditos primero · `vencimiento`: vencimiento más próximo primero
+- `page` (default 1) · `limit` (default 20, tope 100)
+Respuesta 200:
+{ "data": { "tecnicos": [ { "id": 2, "nombre": "Jair Iglesias", "email": "jair.electricidad@trabajoya.com", "oficio": "electricidad", "monetizacion": { "id": 1, "tipo": "creditos", "creditosRestantes": 29, "planVenceAt": null, "paqueteId": "paq_10", "planId": null, "createdAt": "2026-10-23T03:06:14.335Z", "updatedAt": "2026-10-23T03:25:18.409Z" } } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 filtro u orden inválidos · 401 no autenticado / token inválido · 403 no eres admin
+Estado: listo
+
+### GET /admin/monetizacion/transacciones
+Lista todas las transacciones de monetización (compras de créditos, activaciones de plan, descuentos por aceptar, comisiones por completar, cambios de modelo).
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Query (opcional):
+- `tecnicoId` — filtra por técnico específico
+- `tipoTransaccion` ∈ `compra_creditos` | `activacion_plan` | `descuento_credito` | `comision_servicio` | `cambio_modelo`
+- `desde` / `hasta` — fechas ISO 8601
+- `page` (default 1) · `limit` (default 20, tope 100)
+Respuesta 200:
+{ "data": { "transacciones": [ { "id": 12, "tipo": "descuento_credito", "monto": null, "creditos": -1, "descripcion": "Descuento de 1 crédito por aceptar solicitud", "referenciaId": "9", "createdAt": "2026-10-23T03:25:18.797Z", "tecnico": { "id": 2, "nombre": "Jair Iglesias", "email": "jair.electricidad@trabajoya.com" } } ], "paginacion": { "page": 1, "limit": 20, "total": 1, "total_paginas": 1 } } }
+Errores: 400 filtros o paginación inválidos · 401 no autenticado / token inválido · 403 no eres admin
+Estado: listo
