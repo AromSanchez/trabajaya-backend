@@ -142,6 +142,18 @@
 - **"En revisión" (tendencia):** se compara el número de técnicos que enviaron a revisión (`documentosEnviadosAt`) en los últimos 7 días contra los 7 anteriores. **Reportes abiertos** compara reportes creados últimos 7 días vs. 7 anteriores; `masDe48h` cuenta reportes `pendiente` con más de 48 h.
 - **Cola de revisión:** técnicos `en_revision` ordenados por envío más antiguo primero, con días de espera y documentos faltantes (sobre los 5 tipos; en `en_revision` los 3 obligatorios ya están).
 - **Series semanales:** desde el lunes (UTC). `registrosVerificaciones` usa los registros (`Tecnico.createdAt`) y las verificaciones (primeras decisiones hacia `verificado`) por semana; `cancelacionesTardiasSemanales` usa `Servicio.cancelacionTardia` agrupado por `canceladoAt`. Los periodos son por query con topes.
+- **Nueva clave `marketplace` (amplicación del dashboard):** métricas de negocio del marketplace agregadas al mismo endpoint sin tocar las claves previas. Decisiones de cálculo:
+  - **Retención de clientes:** base = clientes con **al menos 1 servicio `completado`**; se mide el % de esos que tienen **2 o más** (con 0 clientes con completados, devuelven `0`).
+  - **Tiempo solicitud→aceptación:** promedio sobre servicios con `aceptadoAt` no nulo (`aceptadoAt − createdAt`). **Aceptación→completado:** sobre servicios con ambas fechas (`completadoAt − aceptadoAt`). Sin datos → `null`.
+  - **Calidad:** promedio y distribución se calculan **solo con reseñas no ocultas** (`oculta: false`); `tasaResenas` = servicios completados con reseña / servicios completados.
+  - **Técnicos activos:** % de técnicos `verificado` con al menos 1 servicio (creado) en los últimos 30 días; top 5 por el contador `Tecnico.serviciosCompletados`.
+  - **Conversión:** servicios `completado` / total de servicios.
+- **Métricas de monetización seriales (`GET /admin/metricas/monetizacion`):** nuevas series semanales (sugeridas por el humano y confirmadas):
+  - **Modelo por semana reconstruido del historial:** la BD no guarda el modelo histórico; se deduce de las transacciones (`compra_creditos`→créditos, `activacion_plan`→mensualidad, `cambio_modelo` según `referenciaId`). Con el último cambio de modelo antes del cierre de cada semana cuenta el modelo activo.
+  - **Tres fuentes de ingreso:** recargas (`compra_creditos`), plan mensual (`activacion_plan`) y comisiones (`comision_servicio`); `cambio_modelo` no suma como ingreso (el cobro representa comprar paquete o activar plan equivalentes). Confirmado por el humano (opción B).
+  - **Adopción:** por `Tecnico.verificadoAt` se cuentan verificados de la semana; de esas, quiénes hicieron su primera activación de modelo esa misma semana.
+  - **Base verificados:** totales de modelos y `porcentajeMonetizados` cuentan solo técnicos `verificado` (filas de técnicos suspendidos/existentes quedan fuera para que el % no supere 100).
+
 
 ### Datos de prueba (T13)
 - **Seed de técnicos separado:** `prisma/seed-tecnicos.js` (`npm run seed:tecnicos`) crea **solo técnicos + sus documentos**; no mezcla clientes, servicios, reseñas ni reportes. Es idempotente por email y borra/re-sube los documentos previos del técnico.

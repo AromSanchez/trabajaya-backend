@@ -5,4 +5,9 @@ async function obtenerDashboard(req, res) {
   res.status(200).json({ data: dashboard });
 }
 
-module.exports = { obtenerDashboard };
+async function obtenerMonetizacion(req, res) {
+  const monetizacion = await metricasService.obtenerMonetizacion(req.validated.query);
+  res.status(200).json({ data: monetizacion });
+}
+
+module.exports = { obtenerDashboard, obtenerMonetizacion };

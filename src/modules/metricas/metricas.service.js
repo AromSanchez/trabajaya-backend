@@ -24,6 +24,17 @@ const TIPOS_DOCUMENTO = [
 
 const ESTADOS_DECISION = ["verificado", "observado", "rechazado"];
 
+const ESTADOS_SERVICIO = [
+  "pendiente",
+  "aceptado",
+  "completado",
+  "cancelado",
+  "expirado",
+  "rechazado",
+];
+
+const SEMANAS_COMPLETADAS = 8;
+
 function inicioSemanaUTC(fecha) {
   const d = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
   const offset = (d.getUTCDay() + 6) % 7;
@@ -88,8 +99,161 @@ function repartirPorSemana(items, semanas, obtenerFecha) {
   return conteos;
 }
 
+async function construirMarketplace(ahora) {
+  const hace7 = new Date(ahora.getTime() - 7 * MS_DIA);
+  const hace30 = new Date(ahora.getTime() - 30 * MS_DIA);
+  const semanas = serieSemanas(SEMANAS_COMPLETADAS);
+  const inicioSerie = semanas[0].inicio;
+
+  const [
+    porEstado,
+    totalServicios,
+    tiemposFilas,
+    completadasSerie,
+    clientesTotal,
+    clientesNuevos7,
+    clientesConSolicitud30,
+    completadasPorCliente,
+    califPromedio,
+    completadosTotal,
+    completadosConResena,
+    distribucionCalif,
+    verificadosTotal,
+    tecnicosConServicio30,
+    topTecnicosRaw,
+  ] = await Promise.all([
+    prisma.servicio.groupBy({ by: ["estado"], _count: { _all: true } }),
+    prisma.servicio.count(),
+    prisma.servicio.findMany({
+      where: { aceptadoAt: { not: null } },
+      select: { createdAt: true, aceptadoAt: true, completadoAt: true },
+    }),
+    prisma.servicio.findMany({
+      where: { estado: "completado", completadoAt: { gte: inicioSerie } },
+      select: { completadoAt: true },
+    }),
+    prisma.usuario.count({ where: { rol: "cliente" } }),
+    prisma.usuario.count({ where: { rol: "cliente", createdAt: { gte: hace7 } } }),
+    prisma.servicio.findMany({
+      where: { createdAt: { gte: hace30 } },
+      select: { clienteId: true },
+      distinct: ["clienteId"],
+    }),
+    prisma.servicio.groupBy({
+      by: ["clienteId"],
+      where: { estado: "completado" },
+      _count: { _all: true },
+    }),
+    prisma.resena.aggregate({
+      where: { oculta: false },
+      _avg: { calificacion: true },
+    }),
+    prisma.servicio.count({ where: { estado: "completado" } }),
+    prisma.servicio.count({
+      where: { estado: "completado", resena: { isNot: null } },
+    }),
+    prisma.resena.groupBy({
+      by: ["calificacion"],
+      where: { oculta: false },
+      _count: { _all: true },
+    }),
+    prisma.tecnico.count({ where: { estadoVerificacion: "verificado" } }),
+    prisma.servicio.findMany({
+      where: { createdAt: { gte: hace30 } },
+      select: { tecnicoId: true },
+      distinct: ["tecnicoId"],
+    }),
+    prisma.tecnico.findMany({
+      where: { serviciosCompletados: { gt: 0 } },
+      orderBy: [{ serviciosCompletados: "desc" }, { id: "asc" }],
+      take: 5,
+      select: {
+        id: true,
+        serviciosCompletados: true,
+        usuario: { select: { nombre: true } },
+      },
+    }),
+  ]);
+
+  const conteoEstado = new Map(porEstado.map((fila) => [fila.estado, fila._count._all]));
+
+  const tiemposHastaAceptacion = [];
+  const tiemposHastaCompletado = [];
+  for (const fila of tiemposFilas) {
+    tiemposHastaAceptacion.push(
+      (fila.aceptadoAt.getTime() - fila.createdAt.getTime()) / MS_HORA,
+    );
+    if (fila.completadoAt) {
+      tiemposHastaCompletado.push(
+        (fila.completadoAt.getTime() - fila.aceptadoAt.getTime()) / MS_HORA,
+      );
+    }
+  }
+
+  const promedio = (valores) =>
+    valores.length ? redondear(valores.reduce((a, b) => a + b, 0) / valores.length) : null;
+
+  const conteosCompletadas = repartirPorSemana(completadasSerie, semanas, (s) => s.completadoAt);
+
+  const clientesCon1 = completadasPorCliente.length;
+  const clientesCon2Mas = completadasPorCliente.filter(
+    (fila) => fila._count._all >= 2,
+  ).length;
+
+  const conteoCalif = new Map(distribucionCalif.map((fila) => [fila.calificacion, fila._count._all]));
+
+  return {
+    servicios: {
+      total: totalServicios,
+      porEstado: ESTADOS_SERVICIO.map((estado) => {
+        const total = conteoEstado.get(estado) ?? 0;
+        return { estado, total, porcentaje: porcentaje(total, totalServicios) };
+      }),
+      tasaConversionCompletado: porcentaje(completadosTotal, totalServicios),
+      evolucionCompletadasSemanal: {
+        semanas: SEMANAS_COMPLETADAS,
+        serie: semanas.map((semana, i) => ({
+          semanaInicio: semana.inicio,
+          completadas: conteosCompletadas[i],
+        })),
+      },
+      tiempoPromedioSolicitudAAceptacionHoras: promedio(tiemposHastaAceptacion),
+      tiempoPromedioAceptacionACompletadoHoras: promedio(tiemposHastaCompletado),
+    },
+    clientes: {
+      total: clientesTotal,
+      nuevosEstaSemana: clientesNuevos7,
+      activos30Dias: clientesConSolicitud30.length,
+      retencionDosOMasCompletados: porcentaje(clientesCon2Mas, clientesCon1),
+    },
+    calidad: {
+      calificacionPromedioGeneral:
+        califPromedio._avg.calificacion === null
+          ? null
+          : redondear(califPromedio._avg.calificacion, 2),
+      tasaResenas: porcentaje(completadosConResena, completadosTotal),
+      distribucionCalificaciones: [5, 4, 3, 2, 1].map((estrellas) => ({
+        estrellas,
+        total: conteoCalif.get(estrellas) ?? 0,
+      })),
+    },
+    tecnicosActivos: {
+      porcentajeVerificadosConServicio30Dias: porcentaje(
+        tecnicosConServicio30.length,
+        verificadosTotal,
+      ),
+      top5: topTecnicosRaw.map((t) => ({
+        id: t.id,
+        nombre: t.usuario.nombre,
+        total: t.serviciosCompletados,
+      })),
+    },
+  };
+}
+
 async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias_reportes, limit_cola }) {
   const ahora = new Date();
+  const promesaMarketplace = construirMarketplace(ahora);
   const hace7 = new Date(ahora.getTime() - 7 * MS_DIA);
   const hace14 = new Date(ahora.getTime() - 14 * MS_DIA);
   const hace48h = new Date(ahora.getTime() - 2 * MS_DIA);
@@ -283,6 +447,7 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
     }),
   };
 
+  const marketplace = await promesaMarketplace;
   return {
     generadoEn: ahora,
     prioridadHoy: {
@@ -319,7 +484,202 @@ async function obtenerDashboard({ semanas_registros, semanas_cancelaciones, dias
       vsMesPasadoPorcentaje,
     },
     colaRevision,
+    marketplace,
   };
 }
 
-module.exports = { obtenerDashboard };
+async function construirMonetizacion({ semanas }) {
+  const ahora = new Date();
+  const serie = serieSemanas(semanas);
+
+  const modelosCambio = ["compra_creditos", "activacion_plan", "cambio_modelo"];
+
+  const [transacciones, tecnicosVerificados, monetizaciones, ingresosAgregados] =
+    await Promise.all([
+      prisma.transaccionMonetizacion.findMany({
+        orderBy: { createdAt: "asc" },
+        select: {
+          tecnicoId: true,
+          tipo: true,
+          referenciaId: true,
+          monto: true,
+          createdAt: true,
+        },
+      }),
+      prisma.tecnico.findMany({
+        where: { estadoVerificacion: "verificado" },
+        select: { id: true, verificadoAt: true },
+      }),
+      prisma.monetizacionTecnico.findMany({
+        where: { tipo: { not: null } },
+        select: { tecnicoId: true, tipo: true },
+      }),
+      prisma.transaccionMonetizacion.groupBy({
+        by: ["tipo"],
+        _sum: { monto: true },
+        where: { tipo: { in: ["compra_creditos", "activacion_plan", "comision_servicio"] } },
+      }),
+    ]);
+
+  const transaccionesPorTecnico = new Map();
+  for (const fila of transacciones) {
+    if (!transaccionesPorTecnico.has(fila.tecnicoId)) {
+      transaccionesPorTecnico.set(fila.tecnicoId, []);
+    }
+    transaccionesPorTecnico.get(fila.tecnicoId).push(fila);
+  }
+
+  function designacion(fila) {
+    if (fila.tipo === "compra_creditos") {
+      return "creditos";
+    }
+    if (fila.tipo === "activacion_plan") {
+      return "mensualidad";
+    }
+    if (fila.tipo === "cambio_modelo") {
+      return fila.referenciaId === "plan_mensual" ? "mensualidad" : "creditos";
+    }
+    return null;
+  }
+
+  const primeraActiva = new Map();
+  for (const [tecnicoId, filas] of transaccionesPorTecnico) {
+    for (const fila of filas) {
+      if (modelosCambio.includes(fila.tipo)) {
+        primeraActiva.set(tecnicoId, fila.createdAt);
+        break;
+      }
+    }
+  }
+
+  function modeloSemana(tecnicoId, finSemana) {
+    let modelo = null;
+    for (const fila of transaccionesPorTecnico.get(tecnicoId) ?? []) {
+      if (fila.createdAt >= finSemana) {
+        break;
+      }
+      const hacia = designacion(fila);
+      if (hacia) {
+        modelo = hacia;
+      }
+    }
+    return modelo;
+  }
+
+  const modelosActivosSerie = serie.map((semana) => {
+    const conteos = { creditos: 0, mensualidad: 0 };
+    for (const tecnicoId of transaccionesPorTecnico.keys()) {
+      const modelo = modeloSemana(tecnicoId, semana.fin);
+      if (modelo) {
+        conteos[modelo] += 1;
+      }
+    }
+    return {
+      semanaInicio: semana.inicio,
+      creditos: conteos.creditos,
+      mensualidad: conteos.mensualidad,
+    };
+  });
+
+  const ingresosSerie = serie.map((semana) => {
+    const porSemana = { creditos: 0, mensualidad: 0, comisiones: 0 };
+    for (const fila of transacciones) {
+      if (
+        fila.createdAt >= semana.inicio &&
+        fila.createdAt < semana.fin &&
+        fila.monto !== null
+      ) {
+        if (fila.tipo === "compra_creditos") {
+          porSemana.creditos += Number(fila.monto);
+        } else if (fila.tipo === "activacion_plan") {
+          porSemana.mensualidad += Number(fila.monto);
+        } else if (fila.tipo === "comision_servicio") {
+          porSemana.comisiones += Number(fila.monto);
+        }
+      }
+    }
+    return {
+      semanaInicio: semana.inicio,
+      ingresosCreditosSemana: redondear(porSemana.creditos, 2),
+      ingresosMensualidadSemana: redondear(porSemana.mensualidad, 2),
+      ingresosComisionesSemana: redondear(porSemana.comisiones, 2),
+      ingresosTotalSemana: redondear(
+        porSemana.creditos + porSemana.mensualidad + porSemana.comisiones,
+        2,
+      ),
+    };
+  });
+
+  const adopcionSerie = serie.map((semana) => {
+    const verificadosSemana = tecnicosVerificados.filter(
+      (t) => t.verificadoAt >= semana.inicio && t.verificadoAt < semana.fin,
+    ).length;
+    const conModeloActivoSemana = tecnicosVerificados.filter(
+      (t) =>
+        t.verificadoAt >= semana.inicio &&
+        t.verificadoAt < semana.fin &&
+        primeraActiva.get(t.id) !== undefined &&
+        primeraActiva.get(t.id) >= semana.inicio &&
+        primeraActiva.get(t.id) < semana.fin,
+    ).length;
+    return { semanaInicio: semana.inicio, verificadosSemana, conModeloActivoSemana };
+  });
+
+  const idsVerificados = new Set(tecnicosVerificados.map((t) => t.id));
+  const monetizacionesDeVerificados = monetizaciones.filter((m) => idsVerificados.has(m.tecnicoId));
+
+  const totalConCreditos = monetizacionesDeVerificados.filter((m) => m.tipo === "creditos").length;
+  const totalConMensualidad = monetizacionesDeVerificados.filter(
+    (m) => m.tipo === "mensualidad",
+  ).length;
+  const verificadosTotal = tecnicosVerificados.length;
+  const conModelo = totalConCreditos + totalConMensualidad;
+
+  const ingresosTotales = { compra_creditos: 0, activacion_plan: 0, comision_servicio: 0 };
+  for (const fila of ingresosAgregados) {
+    ingresosTotales[fila.tipo] = redondear(Number(fila._sum.monto ?? 0), 2);
+  }
+
+  const modeloMasElegido =
+    totalConMensualidad > totalConCreditos
+      ? "mensualidad"
+      : totalConCreditos > 0
+        ? "creditos"
+        : null;
+
+  return {
+    generadoEn: ahora,
+    modelosActivos: {
+      totales: {
+        creditos: totalConCreditos,
+        mensualidad: totalConMensualidad,
+        ninguno: Math.max(verificadosTotal - conModelo, 0),
+      },
+      serie: modelosActivosSerie,
+    },
+    ingresos: { serie: ingresosSerie },
+    adopcion: { serie: adopcionSerie },
+    resumen: {
+      totalConCreditos,
+      totalConMensualidad,
+      totalSinModelo: Math.max(verificadosTotal - conModelo, 0),
+      ingresosTotalesCreditos: ingresosTotales.compra_creditos,
+      ingresosTotalesMensualidad: ingresosTotales.activacion_plan,
+      ingresosTotalesComisiones: ingresosTotales.comision_servicio,
+      ingresosTotales: redondear(
+        ingresosTotales.compra_creditos +
+          ingresosTotales.activacion_plan +
+          ingresosTotales.comision_servicio,
+        2,
+      ),
+      modeloMasElegido,
+      porcentajeMonetizados: porcentaje(conModelo, verificadosTotal),
+    },
+  };
+}
+
+async function obtenerMonetizacion(query) {
+  return construirMonetizacion(query);
+}
+
+module.exports = { obtenerDashboard, obtenerMonetizacion };

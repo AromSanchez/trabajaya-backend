@@ -20,7 +20,7 @@ Errores: 401 no autenticado · 401 token inválido o expirado
 Estado: listo
 
 ### GET /admin/metricas/dashboard
-Devuelve en una sola llamada todos los datos del panel de control: tarjetas superiores, prioridad del día, series de gráficos, distribución por estado/oficio, reportes por motivo, cancelaciones tardías por semana, tiempo medio de verificación y cola de revisión.
+Devuelve en una sola llamada todos los datos del panel de control: tarjetas superiores, prioridad del día, series de gráficos, distribución por estado/oficio, reportes por motivo, cancelaciones tardías por semana, tiempo medio de verificación, cola de revisión y métricas de marketplace.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
 Query (opcional): `semanas_registros` (default 12, 1–52) · `semanas_cancelaciones` (default 8, 1–52) · `dias_reportes` (default 30, 1–365) · `limit_cola` (default 5, 1–50)
 Ejemplo: `GET /admin/metricas/dashboard?semanas_registros=12&semanas_cancelaciones=8&dias_reportes=30&limit_cola=5`
@@ -40,10 +40,109 @@ Respuesta 200:
   "cancelacionesTardiasSemanales": { "semanas": 8, "serie": [ { "semanaInicio": "2026-10-05T00:00:00.000Z", "total": 6 }, { "semanaInicio": "2026-10-12T00:00:00.000Z", "total": 1 } ], "pico": 6 },
   "tecnicosPorOficio": { "total": 16, "oficios": [ { "oficio": "pintura", "total": 5, "porcentaje": 31.3 }, { "oficio": "electricidad", "total": 4, "porcentaje": 25 }, { "oficio": "carpinteria", "total": 3, "porcentaje": 18.8 }, { "oficio": "gasfiteria", "total": 2, "porcentaje": 12.5 }, { "oficio": "albanileria", "total": 2, "porcentaje": 12.5 } ] },
   "tiempoVerificacion": { "promedioHoras": 38.5, "vsMesPasadoPorcentaje": -27 },
-  "colaRevision": { "tecnicos": [ { "id": 2, "nombre": "Edwin Iglesias", "oficio": "electricidad", "distrito": "trujillo", "diasEsperando": 4, "estadoDocumentos": "faltan", "faltantes": ["cul", "certificado_oficio"], "documentosEnviadosAt": "2026-10-14T05:22:39.434Z" } ] }
+  "colaRevision": { "tecnicos": [ { "id": 2, "nombre": "Edwin Iglesias", "oficio": "electricidad", "distrito": "trujillo", "diasEsperando": 4, "estadoDocumentos": "faltan", "faltantes": ["cul", "certificado_oficio"], "documentosEnviadosAt": "2026-10-14T05:22:39.434Z" } ] },
+  "marketplace": {
+    "servicios": {
+      "total": 150,
+      "porEstado": [
+        { "estado": "pendiente", "total": 10, "porcentaje": 6.67 },
+        { "estado": "aceptado", "total": 5, "porcentaje": 3.33 },
+        { "estado": "completado", "total": 120, "porcentaje": 80.0 },
+        { "estado": "cancelado", "total": 8, "porcentaje": 5.33 },
+        { "estado": "expirado", "total": 5, "porcentaje": 3.33 },
+        { "estado": "rechazado", "total": 2, "porcentaje": 1.33 }
+      ],
+      "tasaConversionCompletado": 80.0,
+      "evolucionCompletadasSemanal": {
+        "semanas": 8,
+        "serie": [
+          { "semanaInicio": "2026-09-07T00:00:00.000Z", "completadas": 12 },
+          { "semanaInicio": "2026-09-14T00:00:00.000Z", "completadas": 15 }
+        ]
+      },
+      "tiempoPromedioSolicitudAAceptacionHoras": 1.8,
+      "tiempoPromedioAceptacionACompletadoHoras": 4.2
+    },
+    "clientes": {
+      "total": 50,
+      "nuevosEstaSemana": 3,
+      "activos30Dias": 28,
+      "retencionDosOMasCompletados": 62.5
+    },
+    "calidad": {
+      "calificacionPromedioGeneral": 4.7,
+      "tasaResenas": 85.0,
+      "distribucionCalificaciones": [
+        { "estrellas": 5, "total": 85 },
+        { "estrellas": 4, "total": 20 },
+        { "estrellas": 3, "total": 8 },
+        { "estrellas": 2, "total": 3 },
+        { "estrellas": 1, "total": 4 }
+      ]
+    },
+    "tecnicosActivos": {
+      "porcentajeVerificadosConServicio30Dias": 72.5,
+      "top5": [
+        { "id": 2, "nombre": "Jair Iglesias", "total": 25 },
+        { "id": 5, "nombre": "Mario Gómez", "total": 18 }
+      ]
+    }
+  }
 } }
 Errores: 400 paginación o periodos inválidos · 401 no autenticado / token inválido · 403 no eres admin
-Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `dentroDeMeta`. `vsSemanaPasada` compara altas de los últimos 7 días contra los 7 anteriores. El tiempo de verificación solo cuenta técnicos **ya decididos** (registro → primera decisión del admin hacia `verificado`/`observado`/`rechazado`). `registrosVerificaciones.serie[].verificados` y `tarjetas.verificados.nuevosSemana` cuentan por `Tecnico.verificadoAt` (fecha en que el admin lo pasó a `verificado`, también al reactivar), por lo que son coherentes con `tecnicosPorEstado.verificado`: un técnico primero observado y luego aprobado cuenta en la semana en que se aprobó. Si no hay datos suficientes, `vsMesPasadoPorcentaje` y `promedioHoras` pueden ser `null`.
+Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `dentroDeMeta`. `vsSemanaPasada` compara altas de los últimos 7 días contra los 7 anteriores. El tiempo de verificación solo cuenta técnicos **ya decididos** (registro → primera decisión del admin hacia `verificado`/`observado`/`rechazado`). `registrosVerificaciones.serie[].verificados` y `tarjetas.verificados.nuevosSemana` cuentan por `Tecnico.verificadoAt` (fecha en que el admin lo pasó a `verificado`, también al reactivar), por lo que son coherentes con `tecnicosPorEstado.verificado`: un técnico primero observado y luego aprobado cuenta en la semana en que se aprobó. Si no hay datos suficientes, `vsMesPasadoPorcentaje` y `promedioHoras` pueden ser `null`. Para `marketplace`, los promedios de tiempo que no tengan datos suficientes devuelven `null`. `tasaConversionCompletado` = (`completado` / total solicitudes) * 100. `retencionDosOMasCompletados` = (% de clientes con ≥2 servicios completados sobre clientes con al menos 1 servicio completado o sobre base definida; se calcula sobre clientes con al menos 1 servicio completado). `tasaResenas` = (servicios completados con reseña / servicios completados) * 100. `porcentajeVerificadosConServicio30Dias` = (técnicos verificados con al menos 1 servicio en los últimos 30 días / técnicos verificados totales) * 100.
+Estado: listo
+
+### GET /admin/metricas/monetizacion
+Series temporales semanales de monetización para graficar evolución: modelos activos, ingresos por fuente y adopción de los verificados, más un resumen de totales actuales.
+Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
+Query (opcional): `semanas` (default 8, 1–52)
+Ejemplo: `GET /admin/metricas/monetizacion?semanas=8`
+Respuesta 200:
+{ "data": {
+  "generadoEn": "2026-10-25T18:00:00.000Z",
+  "modelosActivos": {
+    "totales": { "creditos": 3, "mensualidad": 2, "ninguno": 12 },
+    "serie": [
+      { "semanaInicio": "2026-09-07T00:00:00.000Z", "creditos": 1, "mensualidad": 0 },
+      { "semanaInicio": "2026-09-14T00:00:00.000Z", "creditos": 2, "mensualidad": 0 },
+      { "semanaInicio": "2026-09-21T00:00:00.000Z", "creditos": 2, "mensualidad": 1 }
+    ]
+  },
+  "ingresos": {
+    "serie": [
+      { "semanaInicio": "2026-10-12T00:00:00.000Z", "ingresosCreditosSemana": 100, "ingresosMensualidadSemana": 150, "ingresosComisionesSemana": 0, "ingresosTotalSemana": 250 },
+      { "semanaInicio": "2026-10-19T00:00:00.000Z", "ingresosCreditosSemana": 30, "ingresosMensualidadSemana": 0, "ingresosComisionesSemana": 7.5, "ingresosTotalSemana": 37.5 }
+    ]
+  },
+  "adopcion": {
+    "serie": [
+      { "semanaInicio": "2026-10-05T00:00:00.000Z", "verificadosSemana": 4, "conModeloActivoSemana": 2 },
+      { "semanaInicio": "2026-10-12T00:00:00.000Z", "verificadosSemana": 1, "conModeloActivoSemana": 1 }
+    ]
+  },
+  "resumen": {
+    "totalConCreditos": 3,
+    "totalConMensualidad": 2,
+    "totalSinModelo": 12,
+    "ingresosTotalesCreditos": 290,
+    "ingresosTotalesMensualidad": 150,
+    "ingresosTotalesComisiones": 37.5,
+    "ingresosTotales": 477.5,
+    "modeloMasElegido": "creditos",
+    "porcentajeMonetizados": 29.4
+  }
+} }
+Errores: 400 semanas inválido (no entero, < 1 o > 52) · 401 no autenticado / token inválido · 403 no eres admin
+Notas: semanas desde el lunes (UTC), igual que el resto del dashboard; si no hubo datos en una semana los valores van en `0` (nunca `null`).
+- **`modelosActivos.serie` (semana):** técnicos que **tenían ese modelo activo al cierre de la semana**, reconstruido desde el historial de transacciones: la última `compra_creditos`/`cambio_modelo` hacia créditos pone `creditos`, y la última `activacion_plan`/`cambio_modelo` hacia plan pone `mensualidad`. Un técnico puede cambiar de modelo en el pasado, así que puede verse un técnico moverse entre columnas entre semanas (es evolución real, no conteo acumulado de adopciones).
+- **`modelosActivos.totales` y `resumen`:** cuentan **solo técnicos `verificado`** con fila de monetización (`MonetizacionTecnico.tipo`); `ninguno` = verificados sin fila o con `tipo: null` (los técnicos suspendidos/rechazados con fila de monetización no cuentan; por eso `porcentajeMonetizados` nunca supera 100 y puede diferir levemente de `GET /admin/monetizacion/resumen`, que cuenta todas las filas).
+- **`ingresos.serie`:** tres fuentes. `ingresosCreditosSemana` suma montos de transacciones `compra_creditos` (recargas de créditos); `ingresosMensualidadSemana` suma montos de `activacion_plan` (cobro del plan mensual); `ingresosComisionesSemana` suma montos de `comision_servicio` (comisión 5% al completar, solo plan mensual). `ingresosTotalSemana` = las tres fuentes sumadas. Los montos de `cambio_modelo` **no** entran en ninguna fuente (el técnico ya pagó por `compra_creditos` o `activacion_plan` equivalente), por lo que los totales pueden diferir levemente de `GET /admin/monetizacion/resumen` (que sí cuenta `cambio_modelo`).
+- **`adopcion.serie`:** `verificadosSemana` cuenta por `Tecnico.verificadoAt` (semana en que el admin aprobó/reactivo). `conModeloActivoSemana` = de esos verificados, cuántos hicieron su **primera** transacción de activación de modelo (`compra_creditos`/`activacion_plan`/`cambio_modelo`) **esa misma semana**. Las reactivaciones y compras repetidas no participan aquí.
+- **`resumen.porcentajeMonetizados`** = (`totalConCreditos` + `totalConMensualidad`) / técnicos `verificado` × 100.
+- **`resumen` ingresos:** `ingresosTotalesCreditos` (suma `compra_creditos`), `ingresosTotalesMensualidad` (suma `activacion_plan`), `ingresosTotalesComisiones` (suma `comision_servicio`) e `ingresosTotales` (las tres sumadas). Histórico completo, sin ventana.
+- **`resumen.modeloMasElegido`** ∈ `creditos` | `mensualidad`: el modelo con más técnicos activos hoy; si no hay técnicos con modelo, es `null`.
+- `ingresos*` son números decimales (montos `Decimal(10,2)` de transacciones; los pagos son simulados).
 Estado: listo
 
 ### GET /admin/tecnicos

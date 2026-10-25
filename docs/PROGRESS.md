@@ -214,6 +214,18 @@ Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Aut
 - **`TECNICO_SELECT`** ahora incluye `calificacionPromedio`, `totalResenas` y `serviciosCompletados` (aditivo) para que el frontend pueda mostrarlos junto al orden.
 - **Sin migración** (no hay cambios de esquema).
 
+### Amplicación T15 — clave `marketplace` en `GET /admin/metricas/dashboard` (hecha)
+- **Métricas de negocio agregadas** al dashboard sin tocar las claves existentes: `servicios` (distribución por estado con %, conversión a completado, evolución semanal de completadas a 8 semanas fijas, tiempo promedio solicitud→aceptación y aceptación→completado), `clientes` (total, nuevos esta semana, activos 30 días, retención ≥2 completados), `calidad` (promedio general sin ocultas, tasa de reseñas, distribución 1–5) y `tecnicosActivos` (% verificados con servicio en 30 días, top 5 por servicios completados).
+- **Reglas de cálculo** (también en `DECISIONES.md`): promedios de tiempo sin datos → `null`; retención sobre clientes con ≥1 completado; calidad solo con reseñas no ocultas; `tasaConversionCompletado` = completado / total.
+- **Implementación:** `construirMarketplace(ahora)` en `metricas.service.js`,LANZADA EN PARALELO con el Promise.all del dashboard (Promesa esperada al final) — una sola pasada, sin migración. Documentado el payload completo en `docs/ENDPOINTS_ADMIN.md`.
+- **Verificado** contra el servidor real: `marketplace` aparece al final del `data` con las claves previas intactas.
+
+### Amplicación T15 — `GET /admin/metricas/monetizacion` (hecha)
+- **Series semanales de monetización** (query `semanas`, default 8, tope 52): `modelosActivos` (totales actuales + serie reconstruida desde `TransaccionMonetizacion`: última `compra_creditos`/`cambio_modelo`→créditos, `activacion_plan`/`cambio_modelo`→mensualidad antes del cierre de semana), `ingresos` (compra_creditos / activacion_plan / comision_servicio por semana, `cambio_modelo` no suma), `adopcion` (verificados por `verificadoAt` + de esos los que activaron su primer modelo esa misma semana) y `resumen` (totales por modelo solo de técnicos `verificado`, ingresos totales por fuente históricos, `modeloMasElegido`, `porcentajeMonetizados`).
+- **Decisión del humano:** actualizar `ENDPOINTS_ADMIN.md` antes con ejemplo real — `cambio_modelo` no entra como fuente de ingreso (el cobro ya quedó en compra/activación); la serie se reconstruye desde el historial; en gastos, `ninguno` y porcentaje usan base `verificado`, por lo que puede diferir de `/admin/monetizacion/resumen`.
+- **Schema Zod nuevo `monetizacionSchema`** con `semanas` (1–52, default 8) en `metricas.schemas.js`; ruta montada bajo `/admin/metricas` (mismo `router.use` de admin).
+- **Verificado** contra servidor real: series con 7 semanas en 0 y la última con datos, `semanas=0` → 400, sin token → 401.
+
 ### T13 — Datos de prueba (en curso)
 - **Seed de técnicos:** `prisma/seed-tecnicos.js` + script `npm run seed:tecnicos`. Crea **solo técnicos** (usuario + perfil + documentos), idempotente (`upsert` por email); no crea clientes, servicios, reseñas ni reportes.
 - **16 técnicos** con oficio único (electricidad 4, pintura 5, carpintería 3, albañilería 2, gasfitería 2), todos con **distrito `trujillo`**, `disponible: true` y `aniosExperiencia` de 3 a 15.

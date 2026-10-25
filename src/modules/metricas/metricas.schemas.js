@@ -16,4 +16,10 @@ const dashboardSchema = z.object({
   }),
 });
 
-module.exports = { dashboardSchema };
+const monetizacionSchema = z.object({
+  query: z.object({
+    semanas: enteroEnRango(1, 52, "semanas inválido").default(8),
+  }),
+});
+
+module.exports = { dashboardSchema, monetizacionSchema };
