@@ -10,7 +10,12 @@ node_modules/
 logs/
 *.log
 npm-debug.log*
+server.err
+server.out
 
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Restos de sesiones de prueba y herramientas
+.playwright-mcp/
