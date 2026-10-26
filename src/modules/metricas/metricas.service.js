@@ -56,8 +56,8 @@ function inicioMesUTC(fecha) {
   return new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), 1));
 }
 
-function serieMeses(numMeses) {
-  const base = inicioMesUTC(new Date());
+function serieMeses(numMeses, mesFin) {
+  const base = mesFin ? inicioMesUTC(mesFin) : inicioMesUTC(new Date());
   const meses = [];
   for (let i = numMeses - 1; i >= 0; i -= 1) {
     const inicio = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i, 1));
@@ -65,6 +65,12 @@ function serieMeses(numMeses) {
     meses.push({ inicio, fin, etiqueta: etiquetaMes(inicio) });
   }
   return meses;
+}
+
+function parseMes(mes) {
+  if (!mes) return null;
+  const [anio, mesNum] = mes.split("-").map(Number);
+  return new Date(Date.UTC(anio, mesNum - 1, 1));
 }
 
 function etiquetaMes(fecha) {
@@ -132,8 +138,8 @@ function repartirPorSemana(items, semanas, obtenerFecha) {
   return conteos;
 }
 
-async function construirSeriesMensuales(numMeses) {
-  const meses = serieMeses(numMeses);
+async function construirSeriesMensuales(numMeses, mesFin) {
+  const meses = serieMeses(numMeses, mesFin);
   const desde = meses[0].inicio;
 
   const [tecnicos, verificados, servicios, clientesNuevos, resenas] =
@@ -395,10 +401,15 @@ async function obtenerDashboard({
   dias_reportes,
   limit_cola,
   meses,
+  mes,
 }) {
   const ahora = new Date();
+  const mesFin = parseMes(mes);
+  const numMeses = meses || 12;
+  const promesaMensuales = (mes || meses)
+    ? construirSeriesMensuales(numMeses, mesFin || undefined)
+    : null;
   const promesaMarketplace = construirMarketplace(ahora);
-  const promesaMensuales = meses ? construirSeriesMensuales(meses) : null;
   const hace7 = new Date(ahora.getTime() - 7 * MS_DIA);
   const hace14 = new Date(ahora.getTime() - 14 * MS_DIA);
   const hace48h = new Date(ahora.getTime() - 2 * MS_DIA);
@@ -631,12 +642,24 @@ async function obtenerDashboard({
     },
     colaRevision,
     marketplace,
-    ...(seriesMensuales ? { seriesMensuales } : {}),
+    ...(seriesMensuales
+      ? {
+          seriesMensuales,
+          periodo: {
+            seleccionado:
+              mes || seriesMensuales.serie[seriesMensuales.serie.length - 1].mes,
+            anterior:
+              seriesMensuales.serie.length > 1
+                ? seriesMensuales.serie[seriesMensuales.serie.length - 2].mes
+                : null,
+          },
+        }
+      : {}),
   };
   return devuelto;
 }
 
-async function construirMonetizacion({ semanas, meses: mesesParam }) {
+async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
   const ahora = new Date();
   const serie = serieSemanas(semanas);
 
@@ -825,8 +848,10 @@ async function construirMonetizacion({ semanas, meses: mesesParam }) {
     },
   };
 
-  if (mesesParam) {
-    const meses = serieMeses(mesesParam);
+  const mesFin = parseMes(mes);
+  if (mesesParam || mes) {
+    const numMeses = mesesParam || 12;
+    const meses = serieMeses(numMeses, mesFin || undefined);
 
     const serieIngresos = meses.map((mes) => {
       const porMes = { creditos: 0, mensualidad: 0, comisiones: 0 };
@@ -874,6 +899,10 @@ async function construirMonetizacion({ semanas, meses: mesesParam }) {
 
     devuelto.ingresosMensuales = { meses: meses.length, serie: serieIngresos };
     devuelto.modelosMensuales = { meses: meses.length, serie: serieModelos };
+    devuelto.periodo = {
+      seleccionado: meses[meses.length - 1].etiqueta,
+      anterior: meses.length > 1 ? meses[meses.length - 2].etiqueta : null,
+    };
   }
 
   return devuelto;

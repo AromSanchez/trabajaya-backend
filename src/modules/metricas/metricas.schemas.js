@@ -7,6 +7,11 @@ const enteroEnRango = (min, max, mensaje) =>
     .min(min, mensaje)
     .max(max, mensaje);
 
+const mesSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}$/, "mes inválido (formato YYYY-MM)")
+  .optional();
+
 const dashboardSchema = z.object({
   query: z.object({
     semanas_registros: enteroEnRango(1, 52, "semanas_registros inválido").default(12),
@@ -17,6 +22,7 @@ const dashboardSchema = z.object({
       .union([z.literal(""), enteroEnRango(2, 12, "meses inválido")])
       .optional()
       .transform((v) => (v === "" ? undefined : v)),
+    mes: mesSchema,
   }),
 });
 
@@ -27,6 +33,7 @@ const monetizacionSchema = z.object({
       .union([z.literal(""), enteroEnRango(2, 12, "meses inválido")])
       .optional()
       .transform((v) => (v === "" ? undefined : v)),
+    mes: mesSchema,
   }),
 });
 
