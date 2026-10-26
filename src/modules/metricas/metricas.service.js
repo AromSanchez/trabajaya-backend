@@ -67,6 +67,19 @@ function serieMeses(numMeses, mesFin) {
   return meses;
 }
 
+
+function serieSemanasDelMes(mesFin) {
+  const inicioMes = inicioMesUTC(mesFin);
+  const finMes = new Date(Date.UTC(inicioMes.getUTCFullYear(), inicioMes.getUTCMonth() + 1, 1));
+  const semanas = [];
+  let cursor = new Date(inicioMes.getTime());
+  while (cursor < finMes) {
+    const fin = new Date(Math.min(cursor.getTime() + 7 * MS_DIA, finMes.getTime()));
+    semanas.push({ inicio: new Date(cursor.getTime()), fin });
+    cursor = new Date(fin.getTime());
+  }
+  return semanas;
+}
 function parseMes(mes) {
   if (!mes) return null;
   const [anio, mesNum] = mes.split("-").map(Number);
@@ -395,6 +408,91 @@ async function construirMarketplace(ahora) {
   };
 }
 
+
+async function construirSemanalDelMesDashboard(mesFin) {
+  const semanas = serieSemanasDelMes(mesFin);
+  const desde = semanas[0].inicio;
+  const hasta = semanas[semanas.length - 1].fin;
+
+  const [tecnicos, verificados, servicios, clientesNuevos, resenas, cancelaciones] =
+    await Promise.all([
+      prisma.tecnico.findMany({ where: { createdAt: { gte: desde, lt: hasta } }, select: { createdAt: true } }),
+      prisma.tecnico.findMany({ where: { verificadoAt: { gte: desde, lt: hasta } }, select: { verificadoAt: true } }),
+      prisma.servicio.findMany({ where: { createdAt: { gte: desde, lt: hasta } }, select: { createdAt: true, estado: true } }),
+      prisma.usuario.findMany({ where: { rol: "cliente", createdAt: { gte: desde, lt: hasta } }, select: { createdAt: true } }),
+      prisma.resena.findMany({ where: { oculta: false, createdAt: { gte: desde, lt: hasta } }, select: { calificacion: true, createdAt: true } }),
+      prisma.servicio.findMany({ where: { cancelacionTardia: true, canceladoAt: { gte: desde, lt: hasta } }, select: { canceladoAt: true } }),
+    ]);
+
+  const repartir = (items, obtenerFecha) => {
+    const conteos = new Array(semanas.length).fill(0);
+    for (const item of items) {
+      const fecha = obtenerFecha(item);
+      for (let i = 0; i < semanas.length; i += 1) {
+        if (fecha >= semanas[i].inicio && fecha < semanas[i].fin) { conteos[i] += 1; break; }
+      }
+    }
+    return conteos;
+  };
+
+  const conteosServicios = new Array(semanas.length).fill(0).map(() => ({}));
+  for (const servicio of servicios) {
+    for (let i = 0; i < semanas.length; i += 1) {
+      if (servicio.createdAt >= semanas[i].inicio && servicio.createdAt < semanas[i].fin) {
+        conteosServicios[i][servicio.estado] = (conteosServicios[i][servicio.estado] ?? 0) + 1;
+        break;
+      }
+    }
+  }
+
+  const calificacionesPorSemana = semanas.map(() => []);
+  for (const resena of resenas) {
+    for (let i = 0; i < semanas.length; i += 1) {
+      if (resena.createdAt >= semanas[i].inicio && resena.createdAt < semanas[i].fin) {
+        calificacionesPorSemana[i].push(resena.calificacion);
+        break;
+      }
+    }
+  }
+
+  const serie = semanas.map((semana, i) => {
+    const conteo = conteosServicios[i];
+    const totalServicios = Object.values(conteo).reduce((a, b) => a + b, 0);
+    const completados = conteo.completado ?? 0;
+    const calificaciones = calificacionesPorSemana[i];
+    return {
+      semanaInicio: semana.inicio.toISOString(),
+      registrosNuevos: 0,
+      verificados: 0,
+      servicios: totalServicios,
+      completados,
+      cancelados: conteo.cancelado ?? 0,
+      expirados: conteo.expirado ?? 0,
+      rechazados: conteo.rechazado ?? 0,
+      tasaConversion: totalServicios ? porcentaje(completados, totalServicios) : 0,
+      cancelacionesTardias: 0,
+      clientesNuevos: 0,
+      resenas: 0,
+      calificacionPromedio: calificaciones.length
+        ? redondear(calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length, 2)
+        : 0,
+    };
+  });
+
+  const rRegistros = repartir(tecnicos, (t) => t.createdAt);
+  const rVerificados = repartir(verificados, (t) => t.verificadoAt);
+  const rCancela = repartir(cancelaciones, (s) => s.canceladoAt);
+  const rClientes = repartir(clientesNuevos, (u) => u.createdAt);
+  const rResenas = repartir(resenas, (r) => r.createdAt);
+
+  rRegistros.forEach((v, i) => { serie[i].registrosNuevos = v; });
+  rVerificados.forEach((v, i) => { serie[i].verificados = v; });
+  rCancela.forEach((v, i) => { serie[i].cancelacionesTardias = v; });
+  rClientes.forEach((v, i) => { serie[i].clientesNuevos = v; });
+  rResenas.forEach((v, i) => { serie[i].resenas = v; });
+
+  return { semanas: semanas.length, serie };
+}
 async function obtenerDashboard({
   semanas_registros,
   semanas_cancelaciones,
@@ -408,6 +506,9 @@ async function obtenerDashboard({
   const numMeses = meses || 12;
   const promesaMensuales = (mes || meses)
     ? construirSeriesMensuales(numMeses, mesFin || undefined)
+    : null;
+  const promesaSemanalDelMes = mes && mesFin
+    ? construirSemanalDelMesDashboard(mesFin)
     : null;
   const promesaMarketplace = construirMarketplace(ahora);
   const hace7 = new Date(ahora.getTime() - 7 * MS_DIA);
@@ -605,6 +706,7 @@ async function obtenerDashboard({
 
   const marketplace = await promesaMarketplace;
   const seriesMensuales = promesaMensuales ? await promesaMensuales : null;
+  const semanalDelMes = promesaSemanalDelMes ? await promesaSemanalDelMes : null;
   const devuelto = {
     generadoEn: ahora,
     prioridadHoy: {
@@ -655,6 +757,7 @@ async function obtenerDashboard({
           },
         }
       : {}),
+    ...(semanalDelMes ? { semanalDelMes } : {}),
   };
   return devuelto;
 }
@@ -662,6 +765,7 @@ async function obtenerDashboard({
 async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
   const ahora = new Date();
   const serie = serieSemanas(semanas);
+  const mesFin = parseMes(mes);
 
   const modelosCambio = ["compra_creditos", "activacion_plan", "cambio_modelo"];
 
@@ -848,7 +952,6 @@ async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
     },
   };
 
-  const mesFin = parseMes(mes);
   if (mesesParam || mes) {
     const numMeses = mesesParam || 12;
     const meses = serieMeses(numMeses, mesFin || undefined);
@@ -905,9 +1008,63 @@ async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
     };
   }
 
+  if (mes && mesFin) {
+    devuelto.semanalDelMes = await construirSemanalDelMesMonetizacion(
+      mesFin,
+      transacciones,
+      transaccionesPorTecnico,
+    );
+  }
+
   return devuelto;
 }
 
+
+async function construirSemanalDelMesMonetizacion(mesFin, transacciones, transaccionesPorTecnico) {
+  const semanas = serieSemanasDelMes(mesFin);
+  const modeloSemana = (tecnicoId, fechaCierre) => {
+    let modelo = null;
+    let fechaUltima = null;
+    for (const fila of transaccionesPorTecnico.get(tecnicoId) ?? []) {
+      if (fila.createdAt > fechaCierre) break;
+      if (fila.tipo === "compra_creditos" || (fila.tipo === "cambio_modelo" && fila.referenciaId === "creditos")) {
+        if (!fechaUltima || fila.createdAt > fechaUltima) { modelo = "creditos"; fechaUltima = fila.createdAt; }
+      } else if (fila.tipo === "activacion_plan" || (fila.tipo === "cambio_modelo" && fila.referenciaId === "plan_mensual")) {
+        if (!fechaUltima || fila.createdAt > fechaUltima) { modelo = "mensualidad"; fechaUltima = fila.createdAt; }
+      }
+    }
+    return modelo;
+  };
+
+  const ingresosSerie = semanas.map((semana) => {
+    const porSemana = { creditos: 0, mensualidad: 0, comisiones: 0 };
+    for (const fila of transacciones) {
+      if (fila.createdAt >= semana.inicio && fila.createdAt < semana.fin && fila.monto !== null) {
+        if (fila.tipo === "compra_creditos") porSemana.creditos += Number(fila.monto);
+        else if (fila.tipo === "activacion_plan") porSemana.mensualidad += Number(fila.monto);
+        else if (fila.tipo === "comision_servicio") porSemana.comisiones += Number(fila.monto);
+      }
+    }
+    return {
+      semanaInicio: semana.inicio.toISOString(),
+      ingresosCreditosSemana: redondear(porSemana.creditos, 2),
+      ingresosMensualidadSemana: redondear(porSemana.mensualidad, 2),
+      ingresosComisionesSemana: redondear(porSemana.comisiones, 2),
+      ingresosTotalSemana: redondear(porSemana.creditos + porSemana.mensualidad + porSemana.comisiones, 2),
+    };
+  });
+
+  const modelosSerie = semanas.map((semana) => {
+    const conteos = { creditos: 0, mensualidad: 0 };
+    for (const tecnicoId of transaccionesPorTecnico.keys()) {
+      const modelo = modeloSemana(tecnicoId, semana.fin);
+      if (modelo) conteos[modelo] += 1;
+    }
+    return { semanaInicio: semana.inicio.toISOString(), creditos: conteos.creditos, mensualidad: conteos.mensualidad };
+  });
+
+  return { semanas: semanas.length, ingresos: { serie: ingresosSerie }, modelos: { serie: modelosSerie } };
+}
 async function obtenerMonetizacion(query) {
   return construirMonetizacion(query);
 }
