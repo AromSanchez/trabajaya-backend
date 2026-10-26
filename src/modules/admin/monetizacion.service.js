@@ -26,7 +26,16 @@ async function listarTecnicosMonetizacion({ tipo, orden, page = 1, limit } = {})
   const limiteFinal = Math.min(limit ?? LIMITE_POR_DEFECTO, LIMITE_MAXIMO);
 
   const where = {};
-  if (tipo) where.monetizacion = { tipo };
+  if (tipo === "con_modelo") {
+    where.monetizacion = { tipo: { in: ["creditos", "mensualidad"] } };
+  } else if (tipo === "sin_modelo") {
+    where.OR = [
+      { monetizacion: null },
+      { monetizacion: { tipo: null } },
+    ];
+  } else if (tipo) {
+    where.monetizacion = { tipo };
+  }
 
   let orderBy;
   switch (orden) {

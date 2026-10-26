@@ -1,6 +1,11 @@
 const { z } = require("zod");
 
-const TIPOS_MONETIZACION = ["creditos", "mensualidad"];
+const TIPOS_MONETIZACION = [
+  "creditos",
+  "mensualidad",
+  "con_modelo",
+  "sin_modelo",
+];
 const TIPOS_TRANSACCION = [
   "compra_creditos",
   "activacion_plan",
