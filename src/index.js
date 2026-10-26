@@ -27,6 +27,11 @@ app.get("/", (_req, res) => {
   res.json({ data: { servicio: "Trabajo Ya API", estado: "funcionando" } });
 });
 
+// Health check explícito para Render (evita reinicios innecesarios)
+app.get("/health", (_req, res) => {
+  res.status(200).send("OK");
+});
+
 app.use("/auth", authRoutes);
 app.use("/tecnicos", tecnicosRoutes);
 app.use("/tecnicos/monetizacion", monetizacionRoutes);
