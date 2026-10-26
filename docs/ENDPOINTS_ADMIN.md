@@ -22,7 +22,7 @@ Estado: listo
 ### GET /admin/metricas/dashboard
 Devuelve en una sola llamada todos los datos del panel de control: tarjetas superiores, prioridad del día, series de gráficos, distribución por estado/oficio, reportes por motivo, cancelaciones tardías por semana, tiempo medio de verificación, cola de revisión y métricas de marketplace.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
-Query (opcional): `semanas_registros` (default 12, 1–52) · `semanas_cancelaciones` (default 8, 1–52) · `dias_reportes` (default 30, 1–365) · `limit_cola` (default 5, 1–50)
+Query (opcional): `semanas_registros` (default 12, 1–52) · `semanas_cancelaciones` (default 8, 1–52) · `dias_reportes` (default 30, 1–365) · `limit_cola` (default 5, 1–50) · `meses` (opcional, 2–12): si se envía, la respuesta incluye `seriesMensuales` con una serie mensual de N meses para registros/verificaciones, servicios, cancelaciones tardías, clientes nuevos y reseñas. Sin `meses`, solo series semanales.
 Ejemplo: `GET /admin/metricas/dashboard?semanas_registros=12&semanas_cancelaciones=8&dias_reportes=30&limit_cola=5`
 Respuesta 200:
 { "data": {
@@ -96,7 +96,7 @@ Estado: listo
 ### GET /admin/metricas/monetizacion
 Series temporales semanales de monetización para graficar evolución: modelos activos, ingresos por fuente y adopción de los verificados, más un resumen de totales actuales.
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
-Query (opcional): `semanas` (default 8, 1–52)
+Query (opcional): `semanas` (default 8, 1–52) · `meses` (opcional, 2–12): si se envía, la respuesta incluye `mensuales` con series mensuales de ingresos y de modelos activos.
 Ejemplo: `GET /admin/metricas/monetizacion?semanas=8`
 Respuesta 200:
 { "data": {

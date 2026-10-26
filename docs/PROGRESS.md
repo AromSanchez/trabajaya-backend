@@ -226,6 +226,11 @@ Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Aut
 - **Schema Zod nuevo `monetizacionSchema`** con `semanas` (1–52, default 8) en `metricas.schemas.js`; ruta montada bajo `/admin/metricas` (mismo `router.use` de admin).
 - **Verificado** contra servidor real: series con 7 semanas en 0 y la última con datos, `semanas=0` → 400, sin token → 401.
 
+### Amplicación T15 — series mensuales por `?meses=N` (hecha)
+- **`?meses` (2–12) en `GET /admin/metricas/dashboard` y `GET /admin/metricas/monetizacion`:** agrega series mensuales (registros/verificaciones, servicios, cancelaciones tardías, clientes nuevos, reseñas y calificación promedio en dashboard; ingresos por fuente y modelos activos en monetización). Sin `meses`, respuesta igual que antes (solo series semanales). Validación Zod `meses` 2–12; `meses=13` → 400.
+- **Implementación:** `serieMeses`/`construirSeriesMensuales` (dashboard) y bloque mensual en `construirMonetizacion` (monetización); helpers `inicioMesUTC`, `etiquetaMes`, `repartirPorMes`. Sin migración.
+- **Verificado** contra servidor real: `?meses=6` devuelve 6 meses con datos en el último y ceros en los anteriores; `?meses=13` → 400.
+
 ### T13 — Datos de prueba (en curso)
 - **Seed de técnicos:** `prisma/seed-tecnicos.js` + script `npm run seed:tecnicos`. Crea **solo técnicos** (usuario + perfil + documentos), idempotente (`upsert` por email); no crea clientes, servicios, reseñas ni reportes.
 - **16 técnicos** con oficio único (electricidad 4, pintura 5, carpintería 3, albañilería 2, gasfitería 2), todos con **distrito `trujillo`**, `disponible: true` y `aniosExperiencia` de 3 a 15.

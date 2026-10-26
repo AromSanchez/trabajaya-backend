@@ -153,6 +153,7 @@
   - **Tres fuentes de ingreso:** recargas (`compra_creditos`), plan mensual (`activacion_plan`) y comisiones (`comision_servicio`); `cambio_modelo` no suma como ingreso (el cobro representa comprar paquete o activar plan equivalentes). Confirmado por el humano (opción B).
   - **Adopción:** por `Tecnico.verificadoAt` se cuentan verificados de la semana; de esas, quiénes hicieron su primera activación de modelo esa misma semana.
   - **Base verificados:** totales de modelos y `porcentajeMonetizados` cuentan solo técnicos `verificado` (filas de técnicos suspendidos/existentes quedan fuera para que el % no supere 100).
+- **Series mensuales (`?meses=N`, 2–12):** agregadas a ambos endpoints sin tocar las series semanales. El frontend elige granularidad (semanal para 1 mes, mensual para 3/6/12). Se devuelven en claves separadas (`seriesMensuales` en dashboard, `mensuales` en monetización) para no romper clientes antiguos. Los meses se etiquetan `YYYY-MM` (UTC). Sin datos en un mes, los valores van en 0 (nunca `null`), salvo promedios de tiempo que no aplican al agregado mensual (no se incluyen en la serie mensual).
 
 
 ### Datos de prueba (T13)
