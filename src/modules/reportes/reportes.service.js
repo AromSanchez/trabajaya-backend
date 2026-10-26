@@ -30,6 +30,8 @@ const CATEGORIAS_CON_COMENTARIO_OBLIGATORIO = ["fraude", "otro"];
 const REPORTE_SELECT = {
   id: true,
   tipoObjetivo: true,
+  objetivoUsuarioId: true,
+  objetivoResenaId: true,
   categoria: true,
   comentario: true,
   estado: true,
@@ -45,8 +47,10 @@ const REPORTE_SELECT = {
 };
 
 function serializarReporte(reporte) {
-  const objetivo =
-    reporte.tipoObjetivo === "resena"
+  let objetivo;
+
+  if (reporte.tipoObjetivo === "resena") {
+    objetivo = reporte.objetivoResena
       ? {
           tipo: "resena",
           id: reporte.objetivoResena.id,
@@ -54,11 +58,26 @@ function serializarReporte(reporte) {
           comentario: reporte.objetivoResena.comentario,
         }
       : {
+          tipo: "resena",
+          id: reporte.objetivoResenaId ?? null,
+          calificacion: null,
+          comentario: null,
+        };
+  } else {
+    objetivo = reporte.objetivoUsuario
+      ? {
           tipo: reporte.tipoObjetivo,
           id: reporte.objetivoUsuario.id,
           nombre: reporte.objetivoUsuario.nombre,
           rol: reporte.objetivoUsuario.rol,
+        }
+      : {
+          tipo: reporte.tipoObjetivo,
+          id: reporte.objetivoUsuarioId ?? null,
+          nombre: "Usuario no disponible",
+          rol: reporte.tipoObjetivo,
         };
+  }
 
   return {
     id: reporte.id,
