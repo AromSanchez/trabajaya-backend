@@ -12,6 +12,22 @@ const mesSchema = z
   .regex(/^\d{4}-\d{2}$/, "mes inválido (formato YYYY-MM)")
   .optional();
 
+const esFechaCalendarioValida = (fecha) => {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const dt = new Date(Date.UTC(anio, mes - 1, dia));
+  return (
+    dt.getUTCFullYear() === anio &&
+    dt.getUTCMonth() === mes - 1 &&
+    dt.getUTCDate() === dia
+  );
+};
+
+const fechaSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "fecha inválida (formato YYYY-MM-DD)")
+  .refine(esFechaCalendarioValida, "fecha inválida")
+  .optional();
+
 const dashboardSchema = z.object({
   query: z.object({
     semanas_registros: enteroEnRango(1, 52, "semanas_registros inválido").default(12),
@@ -34,6 +50,7 @@ const monetizacionSchema = z.object({
       .optional()
       .transform((v) => (v === "" ? undefined : v)),
     mes: mesSchema,
+    fecha: fechaSchema,
   }),
 });
 

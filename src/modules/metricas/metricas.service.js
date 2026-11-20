@@ -2,6 +2,7 @@ const prisma = require("../../config/prisma");
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 const MS_HORA = 60 * 60 * 1000;
+const OFFSET_PERU_MS = 5 * MS_HORA; // America/Lima (UTC-5, sin horario de verano)
 
 const ESTADOS_VERIFICACION = [
   "pendiente",
@@ -34,6 +35,24 @@ const ESTADOS_SERVICIO = [
 ];
 
 const SEMANAS_COMPLETADAS = 8;
+
+function rangoDiaPeru(fecha) {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const inicio = new Date(Date.UTC(anio, mes - 1, dia, 5, 0, 0, 0));
+  const fin = new Date(inicio.getTime() + MS_DIA);
+  return { inicio, fin };
+}
+
+function fechaDiaAnteriorPeru(fecha) {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const dt = new Date(Date.UTC(anio, mes - 1, dia - 1));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
+function fechaHoyPeru() {
+  const ahoraPeru = new Date(Date.now() - OFFSET_PERU_MS);
+  return `${ahoraPeru.getUTCFullYear()}-${String(ahoraPeru.getUTCMonth() + 1).padStart(2, "0")}-${String(ahoraPeru.getUTCDate()).padStart(2, "0")}`;
+}
 
 function inicioSemanaUTC(fecha) {
   const d = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
@@ -762,10 +781,133 @@ async function obtenerDashboard({
   return devuelto;
 }
 
-async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
+async function construirResumenDiaMonetizacion(fecha) {
+  const fechaConsulta = fecha || fechaHoyPeru();
+  const { inicio, fin } = rangoDiaPeru(fechaConsulta);
+  const fechaAnterior = fechaDiaAnteriorPeru(fechaConsulta);
+  const rangoAnterior = rangoDiaPeru(fechaAnterior);
+
+  const [
+    transaccionesDia,
+    tecnicosRegistradosDia,
+    tecnicosVerificadosDia,
+    serviciosCreadosDia,
+    serviciosCompletadosDia,
+    reportesDia,
+    cancelacionesTardiasDia,
+    transaccionesDiaAnterior,
+    tecnicosRegistradosDiaAnterior,
+    tecnicosVerificadosDiaAnterior,
+    serviciosCreadosDiaAnterior,
+    serviciosCompletadosDiaAnterior,
+    reportesDiaAnterior,
+    cancelacionesTardiasDiaAnterior,
+  ] = await Promise.all([
+    prisma.transaccionMonetizacion.findMany({
+      where: { createdAt: { gte: inicio, lt: fin } },
+      select: { tipo: true, monto: true, creditos: true },
+    }),
+    prisma.tecnico.count({ where: { createdAt: { gte: inicio, lt: fin } } }),
+    prisma.tecnico.count({ where: { verificadoAt: { gte: inicio, lt: fin } } }),
+    prisma.servicio.groupBy({
+      by: ["estado"],
+      where: { createdAt: { gte: inicio, lt: fin } },
+      _count: { _all: true },
+    }),
+    prisma.servicio.count({ where: { completadoAt: { gte: inicio, lt: fin } } }),
+    prisma.reporte.count({ where: { createdAt: { gte: inicio, lt: fin } } }),
+    prisma.servicio.count({
+      where: { cancelacionTardia: true, canceladoAt: { gte: inicio, lt: fin } },
+    }),
+    prisma.transaccionMonetizacion.findMany({
+      where: { createdAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } },
+      select: { tipo: true, monto: true, creditos: true },
+    }),
+    prisma.tecnico.count({ where: { createdAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } } }),
+    prisma.tecnico.count({ where: { verificadoAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } } }),
+    prisma.servicio.groupBy({
+      by: ["estado"],
+      where: { createdAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } },
+      _count: { _all: true },
+    }),
+    prisma.servicio.count({ where: { completadoAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } } }),
+    prisma.reporte.count({ where: { createdAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } } }),
+    prisma.servicio.count({
+      where: { cancelacionTardia: true, canceladoAt: { gte: rangoAnterior.inicio, lt: rangoAnterior.fin } },
+    }),
+  ]);
+
+  const resumirIngresos = (filas) => {
+    const porTipo = { compra_creditos: 0, activacion_plan: 0, comision_servicio: 0 };
+    let creditosVendidos = 0;
+    for (const fila of filas) {
+      if (fila.monto !== null && porTipo[fila.tipo] !== undefined) {
+        porTipo[fila.tipo] += Number(fila.monto);
+      }
+      if (fila.tipo === "compra_creditos" && fila.creditos !== null) {
+        creditosVendidos += Number(fila.creditos);
+      }
+    }
+    return {
+      transacciones: filas.length,
+      creditos: redondear(porTipo.compra_creditos, 2),
+      mensualidad: redondear(porTipo.activacion_plan, 2),
+      comisiones: redondear(porTipo.comision_servicio, 2),
+      total: redondear(porTipo.compra_creditos + porTipo.activacion_plan + porTipo.comision_servicio, 2),
+      creditosVendidos,
+    };
+  };
+
+  const resumirServiciosCreados = (filas) => {
+    const conteo = new Map(filas.map((f) => [f.estado, f._count._all]));
+    const porEstado = ESTADOS_SERVICIO.map((estado) => ({
+      estado,
+      total: conteo.get(estado) ?? 0,
+    }));
+    const total = porEstado.reduce((s, f) => s + f.total, 0);
+    return { total, porEstado };
+  };
+
+  const ingresos = resumirIngresos(transaccionesDia);
+  const ingresosAnterior = resumirIngresos(transaccionesDiaAnterior);
+  const serviciosCreados = resumirServiciosCreados(serviciosCreadosDia);
+  const serviciosCreadosAnterior = resumirServiciosCreados(serviciosCreadosDiaAnterior);
+
+  return {
+    fecha: fechaConsulta,
+    zonaHoraria: "America/Lima",
+    ingresos,
+    tecnicos: { registrados: tecnicosRegistradosDia, verificados: tecnicosVerificadosDia },
+    servicios: { creados: serviciosCreados, completados: serviciosCompletadosDia },
+    reportes: { creados: reportesDia },
+    cancelacionesTardias: { total: cancelacionesTardiasDia },
+    comparacionDiaAnterior: {
+      fecha: fechaAnterior,
+      ingresos: {
+        total: ingresos.total - ingresosAnterior.total,
+        creditos: redondear(ingresos.creditos - ingresosAnterior.creditos, 2),
+        mensualidad: redondear(ingresos.mensualidad - ingresosAnterior.mensualidad, 2),
+        comisiones: redondear(ingresos.comisiones - ingresosAnterior.comisiones, 2),
+      },
+      tecnicos: {
+        registrados: tecnicosRegistradosDia - tecnicosRegistradosDiaAnterior,
+        verificados: tecnicosVerificadosDia - tecnicosVerificadosDiaAnterior,
+      },
+      servicios: {
+        creados: serviciosCreados.total - serviciosCreadosAnterior.total,
+        completados: serviciosCompletadosDia - serviciosCompletadosDiaAnterior,
+      },
+      reportes: { creados: reportesDia - reportesDiaAnterior },
+      cancelacionesTardias: { total: cancelacionesTardiasDia - cancelacionesTardiasDiaAnterior },
+    },
+  };
+}
+
+async function construirMonetizacion({ semanas, meses: mesesParam, mes, fecha }) {
   const ahora = new Date();
   const serie = serieSemanas(semanas);
   const mesFin = parseMes(mes);
+  const promesaResumenDia = fecha ? construirResumenDiaMonetizacion(fecha) : null;
 
   const modelosCambio = ["compra_creditos", "activacion_plan", "cambio_modelo"];
 
@@ -1016,9 +1158,12 @@ async function construirMonetizacion({ semanas, meses: mesesParam, mes }) {
     );
   }
 
+  if (promesaResumenDia) {
+    devuelto.resumenDia = await promesaResumenDia;
+  }
+
   return devuelto;
 }
-
 
 async function construirSemanalDelMesMonetizacion(mesFin, transacciones, transaccionesPorTecnico) {
   const semanas = serieSemanasDelMes(mesFin);

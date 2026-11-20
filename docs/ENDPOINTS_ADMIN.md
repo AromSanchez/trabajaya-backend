@@ -94,32 +94,22 @@ Notas: no hay metas configuradas todavía, así que no se devuelve `meta` ni `de
 Estado: listo
 
 ### GET /admin/metricas/monetizacion
-Series temporales semanales de monetización para graficar evolución: modelos activos, ingresos por fuente y adopción de los verificados, más un resumen de totales actuales.
+Series temporales semanales de monetización para graficar evolución: modelos activos, ingresos por fuente y adopción de los verificados, más un resumen de totales actuales. Opcionalmente incluye el resumen de un día puntual (`resumenDia`).
 Auth: sí — `Authorization: Bearer <token>` (rol `admin`)
-Query (opcional): `semanas` (default 8, 1–52) · `meses` (opcional, 2–12) · `mes` (opcional, `YYYY-MM`): si se envía, la respuesta incluye `ingresosMensuales` y `modelosMensuales` con 12 meses terminando en ese mes y `periodo`.
-Ejemplo: `GET /admin/metricas/monetizacion?semanas=8`
-Respuesta 200:
+Query (opcional): `semanas` (default 8, 1–52) · `meses` (opcional, 2–12) · `mes` (opcional, `YYYY-MM`): si se envía, la respuesta incluye `ingresosMensuales` y `modelosMensuales` con 12 meses terminando en ese mes y `periodo` · `fecha` (opcional, `YYYY-MM-DD`, día calendario en hora local Perú): si se envía, la respuesta incluye `resumenDia` para ese día.
+Ejemplos: `GET /admin/metricas/monetizacion?semanas=8` · `GET /admin/metricas/monetizacion?semanas=8&fecha=2026-11-20`
+Respuesta 200 (con `fecha=2026-11-20`):
 { "data": {
-  "generadoEn": "2026-10-25T18:00:00.000Z",
+  "generadoEn": "2026-11-20T18:00:00.000Z",
   "modelosActivos": {
     "totales": { "creditos": 3, "mensualidad": 2, "ninguno": 12 },
-    "serie": [
-      { "semanaInicio": "2026-09-07T00:00:00.000Z", "creditos": 1, "mensualidad": 0 },
-      { "semanaInicio": "2026-09-14T00:00:00.000Z", "creditos": 2, "mensualidad": 0 },
-      { "semanaInicio": "2026-09-21T00:00:00.000Z", "creditos": 2, "mensualidad": 1 }
-    ]
+    "serie": [ { "semanaInicio": "2026-11-16T00:00:00.000Z", "creditos": 3, "mensualidad": 2 } ]
   },
   "ingresos": {
-    "serie": [
-      { "semanaInicio": "2026-10-12T00:00:00.000Z", "ingresosCreditosSemana": 100, "ingresosMensualidadSemana": 150, "ingresosComisionesSemana": 0, "ingresosTotalSemana": 250 },
-      { "semanaInicio": "2026-10-19T00:00:00.000Z", "ingresosCreditosSemana": 30, "ingresosMensualidadSemana": 0, "ingresosComisionesSemana": 7.5, "ingresosTotalSemana": 37.5 }
-    ]
+    "serie": [ { "semanaInicio": "2026-11-16T00:00:00.000Z", "ingresosCreditosSemana": 30, "ingresosMensualidadSemana": 0, "ingresosComisionesSemana": 7.5, "ingresosTotalSemana": 37.5 } ]
   },
   "adopcion": {
-    "serie": [
-      { "semanaInicio": "2026-10-05T00:00:00.000Z", "verificadosSemana": 4, "conModeloActivoSemana": 2 },
-      { "semanaInicio": "2026-10-12T00:00:00.000Z", "verificadosSemana": 1, "conModeloActivoSemana": 1 }
-    ]
+    "serie": [ { "semanaInicio": "2026-11-16T00:00:00.000Z", "verificadosSemana": 0, "conModeloActivoSemana": 0 } ]
   },
   "resumen": {
     "totalConCreditos": 3,
@@ -131,10 +121,46 @@ Respuesta 200:
     "ingresosTotales": 477.5,
     "modeloMasElegido": "creditos",
     "porcentajeMonetizados": 29.4
+  },
+  "resumenDia": {
+    "fecha": "2026-11-20",
+    "zonaHoraria": "America/Lima",
+    "ingresos": { "transacciones": 3, "creditos": 30, "mensualidad": 0, "comisiones": 7.5, "total": 37.5, "creditosVendidos": 10 },
+    "tecnicos": { "registrados": 2, "verificados": 1 },
+    "servicios": {
+      "creados": {
+        "total": 5,
+        "porEstado": [
+          { "estado": "pendiente", "total": 2 },
+          { "estado": "aceptado", "total": 1 },
+          { "estado": "completado", "total": 1 },
+          { "estado": "cancelado", "total": 1 },
+          { "estado": "expirado", "total": 0 },
+          { "estado": "rechazado", "total": 0 }
+        ]
+      },
+      "completados": 2
+    },
+    "reportes": { "creados": 1 },
+    "cancelacionesTardias": { "total": 0 },
+    "comparacionDiaAnterior": {
+      "fecha": "2026-11-19",
+      "ingresos": { "total": 7.5, "creditos": 30, "mensualidad": 0, "comisiones": -22.5 },
+      "tecnicos": { "registrados": 2, "verificados": 1 },
+      "servicios": { "creados": 1, "completados": -1 },
+      "reportes": { "creados": 1 },
+      "cancelacionesTardias": { "total": 0 }
+    }
   }
 } }
-Errores: 400 semanas inválido (no entero, < 1 o > 52) · 401 no autenticado / token inválido · 403 no eres admin
+Errores: 400 semanas/meses/mes/fecha inválidos (formato o rango) · 401 no autenticado / token inválido · 403 no eres admin
 Notas: semanas desde el lunes (UTC), igual que el resto del dashboard; si no hubo datos en una semana los valores van en `0` (nunca `null`).
+- **`resumenDia` (solo si se envía `fecha`):** agrega métricas del día calendario indicado en **hora local Perú (`America/Lima`, UTC-5)**. `fecha` por defecto puede enviarse como el día de hoy (ej. `2026-11-20`). No reemplaza ni modifica las series semanales/mensuales.
+  - `ingresos`: cuenta transacciones del día con monto > 0 por fuente (`compra_creditos` → `creditos`, `activacion_plan` → `mensualidad`, `comision_servicio` → `comisiones`); `total` = suma de las tres; `creditosVendidos` = suma de créditos de `compra_creditos`. `cambio_modelo` y `descuento_credito` no suman ingreso.
+  - `tecnicos`: `registrados` por `Tecnico.createdAt`; `verificados` por `Tecnico.verificadoAt`.
+  - `servicios.creados`: servicios creados ese día (`Servicio.createdAt`) con total y distribución por estado en el momento de la consulta. `servicios.completados`: servicios completados ese día (`Servicio.completadoAt`).
+  - `reportes.creados`: reportes creados ese día. `cancelacionesTardias.total`: servicios con `cancelacionTardia = true` cancelados ese día (`Servicio.canceladoAt`).
+  - `comparacionDiaAnterior`: diferencias absolutas respecto al día anterior (valor del día − valor del día anterior) para ingresos, técnicos, servicios, reportes y cancelaciones tardías; incluye la `fecha` del día anterior.
 - **`modelosActivos.serie` (semana):** técnicos que **tenían ese modelo activo al cierre de la semana**, reconstruido desde el historial de transacciones: la última `compra_creditos`/`cambio_modelo` hacia créditos pone `creditos`, y la última `activacion_plan`/`cambio_modelo` hacia plan pone `mensualidad`. Un técnico puede cambiar de modelo en el pasado, así que puede verse un técnico moverse entre columnas entre semanas (es evolución real, no conteo acumulado de adopciones).
 - **`modelosActivos.totales` y `resumen`:** cuentan **solo técnicos `verificado`** con fila de monetización (`MonetizacionTecnico.tipo`); `ninguno` = verificados sin fila o con `tipo: null` (los técnicos suspendidos/rechazados con fila de monetización no cuentan; por eso `porcentajeMonetizados` nunca supera 100 y puede diferir levemente de `GET /admin/monetizacion/resumen`, que cuenta todas las filas).
 - **`ingresos.serie`:** tres fuentes. `ingresosCreditosSemana` suma montos de transacciones `compra_creditos` (recargas de créditos); `ingresosMensualidadSemana` suma montos de `activacion_plan` (cobro del plan mensual); `ingresosComisionesSemana` suma montos de `comision_servicio` (comisión 5% al completar, solo plan mensual). `ingresosTotalSemana` = las tres fuentes sumadas. Los montos de `cambio_modelo` **no** entran en ninguna fuente (el técnico ya pagó por `compra_creditos` o `activacion_plan` equivalente), por lo que los totales pueden diferir levemente de `GET /admin/monetizacion/resumen` (que sí cuenta `cambio_modelo`).

@@ -231,6 +231,11 @@ Un **único** endpoint (decidido) que devuelve todos los bloques del panel. `Aut
 - **Implementación:** `serieMeses`/`construirSeriesMensuales` (dashboard) y bloque mensual en `construirMonetizacion` (monetización); helpers `inicioMesUTC`, `etiquetaMes`, `repartirPorMes`. Sin migración.
 - **Verificado** contra servidor real: `?meses=6` devuelve 6 meses con datos en el último y ceros en los anteriores; `?meses=13` → 400.
 
+### Amplicación T15 — resumen diario de monetización por `?fecha=` (hecha)
+- **`GET /admin/metricas/monetizacion?fecha=YYYY-MM-DD`:** agrega `resumenDia` (día calendario en **hora local Perú, `America/Lima` UTC-5**) con ingresos del día por fuente (`creditos`, `mensualidad`, `comisiones`), transacciones y créditos vendidos, técnicos registrados/verificados, servicios creados (total y por estado) y completados, reportes creados y cancelaciones tardías, más `comparacionDiaAnterior` (diferencias absolutas vs. día previo).
+- **Implementación:** query opcional `fecha` en `monetizacionSchema` (Zod, validación de calendario), `construirResumenDiaMonetizacion` en `metricas.service.js` (rango `[00:00:00, 24:00:00)` Lima convertido a UTC). Sin migración; compatible con el resto de parámetros.
+- **Docs:** `docs/ENDPOINTS_ADMIN.md` y `docs/DECISIONES.md` actualizados.
+
 ### T13 — Datos de prueba (en curso)
 - **Seed de técnicos:** `prisma/seed-tecnicos.js` + script `npm run seed:tecnicos`. Crea **solo técnicos** (usuario + perfil + documentos), idempotente (`upsert` por email); no crea clientes, servicios, reseñas ni reportes.
 - **16 técnicos** con oficio único (electricidad 4, pintura 5, carpintería 3, albañilería 2, gasfitería 2), todos con **distrito `trujillo`**, `disponible: true` y `aniosExperiencia` de 3 a 15.
