@@ -700,6 +700,8 @@ async function obtenerDashboard({
   const promedioPrevios30 = tiemposPrevios30.length
     ? tiemposPrevios30.reduce((suma, t) => suma + t.horas, 0) / tiemposPrevios30.length
     : null;
+  const promedioMesActualHoras = promedioUltimos30 === null ? null : redondear(promedioUltimos30);
+  const promedioMesPasadoHoras = promedioPrevios30 === null ? null : redondear(promedioPrevios30);
   const vsMesPasadoPorcentaje =
     promedioUltimos30 !== null && promedioPrevios30
       ? redondear(((promedioUltimos30 - promedioPrevios30) / promedioPrevios30) * 100)
@@ -760,6 +762,8 @@ async function obtenerDashboard({
     tiempoVerificacion: {
       promedioHoras,
       vsMesPasadoPorcentaje,
+      promedioMesActualHoras,
+      promedioMesPasadoHoras,
     },
     colaRevision,
     marketplace,
